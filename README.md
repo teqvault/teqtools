@@ -79,27 +79,6 @@ Arrows      Nudge slice 1px (Shift = 10px)
 Escape      Deselect
 ```
 
----
-
-## Deployment
-
-Hosted on **GitHub Pages** with a custom domain via Namecheap DNS.
-
-DNS (Namecheap Advanced DNS):
-```
-A Record    @    185.199.108.153
-A Record    @    185.199.109.153
-A Record    @    185.199.110.153
-A Record    @    185.199.111.153
-CNAME       www  teqxus.com.github.io
-```
-
-GitHub Pages is set to serve from the `main` branch root. The `CNAME` file in the repo root contains `teqxus.com`.
-
-To add a new tool, create a subfolder and drop an `index.html` in it. It will be immediately accessible at `teqxus.com/<foldername>` with no config needed.
-
----
-
 ## Related
 
 - **Studio:** [teqvault.online](https://teqvault.online)
