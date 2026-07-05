@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="TeqVault Tools — standalone utilities built by Teq Vault LLC. Image slicers, AI assistants, document readers, data recovery tools, and more.">
+<meta property="og:title" content="TeqVault Tools">
+<meta property="og:description" content="Standalone utilities built by Teq Vault LLC — engineered with the same precision as our games.">
+<meta name="theme-color" content="#0c0d12">
+<title>TeqVault Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── tokens ── */
+:root {
+  --bg:      #0c0d12;
+  --surface: #13151d;
+  --card:    #191c27;
+  --border:  #252836;
+  --ink:     #e8eaf2;
+  --dim:     #7c819a;
+  --faint:   #3a3f56;
+  --purple:  #7c5cbf;
+  --pink:    #c45fa0;
+  --cyan:    #45c8ff;
+  --amber:   #f5a623;
+  --green:   #3ecf7a;
+  --grad:    linear-gradient(135deg, var(--purple), var(--pink));
+}
+
+/* ── reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+img { display: block; max-width: 100%; }
+
+/* ── nav ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; gap: 24px;
+  padding: 0 clamp(20px, 5vw, 64px);
+  height: 60px;
+  background: rgba(12, 13, 18, 0.85);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  font-family: "Cinzel", serif; font-weight: 700; font-size: 14px;
+  letter-spacing: .08em; color: var(--ink);
+}
+.nav-logo span { color: var(--dim); font-weight: 400; font-size: 12px; margin-left: 4px; }
+nav a.nav-link {
+  font-size: 13px; color: var(--dim); font-weight: 500;
+  transition: color .2s;
+}
+nav a.nav-link:hover { color: var(--ink); }
+.nav-spacer { flex: 1; }
+.nav-cta {
+  font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: 8px;
+  background: var(--grad); color: #fff;
+  transition: opacity .2s;
+}
+.nav-cta:hover { opacity: .88; }
+.nav-links { display: flex; gap: 24px; }
+@media (max-width: 640px) { .nav-links { display: none; } }
+
+/* ── hero ── */
+.hero {
+  min-height: 100svh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 100px clamp(20px, 6vw, 80px) 80px;
+  position: relative; overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 40%, rgba(124,92,191,.18) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 75% 60%, rgba(196,95,160,.12) 0%, transparent 70%);
+}
+.hero-eyebrow {
+  font-family: "Cinzel", serif; font-size: 11px; font-weight: 600;
+  letter-spacing: .25em; text-transform: uppercase; color: var(--purple);
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-family: "Cinzel", serif; font-weight: 700;
+  font-size: clamp(36px, 6vw, 76px);
+  line-height: 1.1; letter-spacing: -.01em;
+  margin-bottom: 24px;
+}
+.hero h1 em {
+  font-style: normal;
+  background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hero-sub {
+  font-size: clamp(15px, 2vw, 18px); color: var(--dim); max-width: 520px;
+  margin: 0 auto 40px;
+}
+.hero-stats {
+  display: flex; gap: clamp(24px, 5vw, 64px); justify-content: center;
+  margin-bottom: 48px;
+}
+.stat-n {
+  font-family: "Cinzel", serif; font-size: clamp(28px, 4vw, 44px); font-weight: 700;
+  background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.stat-l { font-size: 12px; color: var(--dim); letter-spacing: .05em; margin-top: 2px; }
+.hero-scroll {
+  position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--faint); font-size: 11px; letter-spacing: .1em;
+  animation: bob 2.4s ease-in-out infinite;
+}
+@keyframes bob { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(6px)} }
+
+/* ── section ── */
+.section {
+  padding: clamp(64px, 8vw, 120px) clamp(20px, 6vw, 80px);
+  max-width: 1280px; margin: 0 auto;
+}
+.section-head {
+  display: flex; align-items: baseline; gap: 16px; margin-bottom: 48px;
+}
+.section-head h2 {
+  font-family: "Cinzel", serif; font-size: clamp(22px, 3vw, 32px); font-weight: 700;
+}
+.section-rule {
+  flex: 1; height: 1px; background: var(--border);
+}
+.section-label {
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+}
+
+/* ── tool grid ── */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+/* ── tool card ── */
+.tool-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  display: flex; flex-direction: column; gap: 16px;
+  position: relative; overflow: hidden;
+  transition: border-color .25s, transform .25s;
+  cursor: default;
+}
+.tool-card::before {
+  content: "";
+  position: absolute; inset: 0; border-radius: 16px;
+  background: var(--grad); opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  padding: 1px;
+  z-index: 0;
+}
+.tool-card:hover::before { opacity: 1; }
+.tool-card:hover { transform: translateY(-3px); }
+.tool-card > * { position: relative; z-index: 1; }
+
+.card-head { display: flex; align-items: flex-start; gap: 14px; }
+.card-icon {
+  width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.card-icon.purple { background: rgba(124,92,191,.18); }
+.card-icon.cyan   { background: rgba(69,200,255,.14); }
+.card-icon.amber  { background: rgba(245,166,35,.14); }
+.card-icon.pink   { background: rgba(196,95,160,.16); }
+.card-icon.green  { background: rgba(62,207,122,.13); }
+.card-icon.teal   { background: rgba(32,210,190,.13); }
+
+.card-meta { flex: 1; min-width: 0; }
+.card-name {
+  font-family: "Cinzel", serif; font-size: 16px; font-weight: 700;
+  letter-spacing: .03em; line-height: 1.2;
+}
+.card-url { font-size: 11px; color: var(--dim); margin-top: 3px; font-family: ui-monospace, monospace; }
+
+/* status pip */
+.status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; padding: 4px 10px; border-radius: 20px;
+  flex-shrink: 0; margin-top: 2px;
+}
+.status.live   { background: rgba(62,207,122,.12); color: var(--green); }
+.status.beta   { background: rgba(245,166,35,.12); color: var(--amber); }
+.status.dev    { background: rgba(124,92,191,.12); color: var(--purple); }
+.status.new    { background: rgba(69,200,255,.12); color: var(--cyan); }
+.pip {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+.status.live .pip  { background: var(--green);  animation: pulse-g 2s ease-in-out infinite; }
+.status.beta .pip  { background: var(--amber);  animation: pulse-a 2.4s ease-in-out infinite; }
+.status.new .pip   { background: var(--cyan);   animation: pulse-c 1.8s ease-in-out infinite; }
+.status.dev .pip   { background: var(--purple); }
+@keyframes pulse-g { 0%,100%{box-shadow:0 0 0 0 rgba(62,207,122,.6)} 50%{box-shadow:0 0 0 5px rgba(62,207,122,0)} }
+@keyframes pulse-a { 0%,100%{box-shadow:0 0 0 0 rgba(245,166,35,.6)} 50%{box-shadow:0 0 0 5px rgba(245,166,35,0)} }
+@keyframes pulse-c { 0%,100%{box-shadow:0 0 0 0 rgba(69,200,255,.6)} 50%{box-shadow:0 0 0 5px rgba(69,200,255,0)} }
+
+.card-desc {
+  font-size: 14px; color: var(--dim); line-height: 1.65; flex: 1;
+}
+.card-tags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.tag {
+  font-size: 11px; font-weight: 500; letter-spacing: .04em;
+  padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--faint);
+}
+.card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-card {
+  font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 9px;
+  border: none; cursor: pointer; transition: opacity .2s, background .2s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-card.primary { background: var(--grad); color: #fff; }
+.btn-card.primary:hover { opacity: .85; }
+.btn-card.ghost {
+  background: transparent; color: var(--dim);
+  border: 1px solid var(--border);
+}
+.btn-card.ghost:hover { color: var(--ink); border-color: var(--faint); background: var(--surface); }
+.btn-card.disabled {
+  background: var(--surface); color: var(--faint);
+  border: 1px solid var(--border); cursor: not-allowed; opacity: .6;
+}
+
+/* ── about strip ── */
+.about-strip {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 64px clamp(20px, 6vw, 80px);
+}
+.about-inner {
+  max-width: 1280px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center;
+}
+.about-inner h2 {
+  font-family: "Cinzel", serif; font-size: clamp(22px, 3vw, 32px); font-weight: 700;
+  margin-bottom: 16px; line-height: 1.2;
+}
+.about-inner p { color: var(--dim); font-size: 15px; line-height: 1.75; margin-bottom: 12px; }
+.about-inner p:last-child { margin-bottom: 0; }
+.about-links { display: flex; flex-direction: column; gap: 12px; }
+.about-link {
+  display: flex; align-items: center; gap: 14px; padding: 16px 20px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  transition: border-color .2s, transform .2s;
+}
+.about-link:hover { border-color: var(--purple); transform: translateX(4px); }
+.about-link-icon { font-size: 20px; width: 36px; text-align: center; }
+.about-link-text strong { display: block; font-size: 14px; font-weight: 600; }
+.about-link-text span { font-size: 12px; color: var(--dim); }
+.about-link-arrow { margin-left: auto; color: var(--faint); font-size: 16px; }
+@media (max-width: 720px) { .about-inner { grid-template-columns: 1fr; gap: 40px; } }
+
+/* ── footer ── */
+footer {
+  padding: 48px clamp(20px, 6vw, 80px) 32px;
+  border-top: 1px solid var(--border);
+}
+.footer-inner {
+  max-width: 1280px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; gap: 32px; justify-content: space-between; align-items: flex-start;
+}
+.footer-brand { max-width: 260px; }
+.footer-logo {
+  font-family: "Cinzel", serif; font-weight: 700; font-size: 15px;
+  letter-spacing: .08em; margin-bottom: 10px;
+}
+.footer-brand p { font-size: 13px; color: var(--dim); line-height: 1.6; }
+.footer-col h4 { font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 14px; }
+.footer-col a { display: block; font-size: 13px; color: var(--dim); margin-bottom: 10px; transition: color .2s; }
+.footer-col a:hover { color: var(--ink); }
+.footer-bottom {
+  max-width: 1280px; margin: 32px auto 0; padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+  font-size: 12px; color: var(--faint);
+}
+.footer-bottom a { color: var(--faint); transition: color .2s; }
+.footer-bottom a:hover { color: var(--dim); }
+
+/* ── scroll reveal ── */
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity .55s ease, transform .55s ease; }
+.reveal.on { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+
+<!-- ── nav ── -->
+<nav>
+  <a href="/" class="nav-logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect width="22" height="22" rx="6" fill="url(#lg)"/><rect x="5" y="5" width="5" height="5" rx="1.5" fill="white" opacity=".9"/><rect x="12" y="5" width="5" height="5" rx="1.5" fill="white" opacity=".6"/><rect x="5" y="12" width="5" height="5" rx="1.5" fill="white" opacity=".6"/><rect x="12" y="12" width="5" height="5" rx="1.5" fill="white" opacity=".35"/><defs><linearGradient id="lg" x1="0" y1="0" x2="22" y2="22"><stop stop-color="#7c5cbf"/><stop offset="1" stop-color="#c45fa0"/></linearGradient></defs></svg>
+    TeqVault Tools <span>by Teq Vault LLC</span>
+  </a>
+  <div class="nav-links">
+    <a href="#tools" class="nav-link">Tools</a>
+    <a href="#about" class="nav-link">About</a>
+    <a href="https://teqvault.online" class="nav-link" target="_blank" rel="noopener">Teq Vault</a>
+  </div>
+  <div class="nav-spacer"></div>
+  <a href="https://teqxus.app" class="nav-cta" target="_blank" rel="noopener">Open TeqXus</a>
+</nav>
+
+<!-- ── hero ── -->
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <p class="hero-eyebrow">Teq Vault LLC · Bossier City, Louisiana</p>
+  <h1>Tools built with<br><em>engineering precision.</em></h1>
+  <p class="hero-sub">The same craft that goes into our games goes into our software. Standalone utilities that respect your time, work offline, and don't require an account.</p>
+  <div class="hero-stats">
+    <div>
+      <div class="stat-n">6</div>
+      <div class="stat-l">Tools</div>
+    </div>
+    <div>
+      <div class="stat-n">3</div>
+      <div class="stat-l">Live Now</div>
+    </div>
+    <div>
+      <div class="stat-n">∞</div>
+      <div class="stat-l">No Accounts</div>
+    </div>
+  </div>
+  <a href="#tools" aria-label="Scroll to tools">
+    <div class="hero-scroll">
+      <span style="letter-spacing:.12em">EXPLORE</span>
+      <svg width="16" height="20" viewBox="0 0 16 20" fill="none"><path d="M8 2v14M2 12l6 6 6-6" stroke="#40455a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </a>
+</section>
+
+<!-- ── tools grid ── -->
+<div class="section" id="tools">
+  <div class="section-head reveal">
+    <h2>The Toolkit</h2>
+    <div class="section-rule"></div>
+    <span class="section-label">6 tools</span>
+  </div>
+
+  <div class="tool-grid">
+
+    <!-- TeqSlice -->
+    <div class="tool-card reveal">
+      <div class="card-head">
+        <div class="card-icon cyan">◫</div>
+        <div class="card-meta">
+          <div class="card-name">TeqSlice</div>
+          <div class="card-url">teqxus.com/teqslice</div>
+        </div>
+        <span class="status new"><span class="pip"></span>New</span>
+      </div>
+      <p class="card-desc">A Photoshop-style image slicing tool that runs entirely in your browser. Draw slices, grid-cut sprite sheets, use guides, and bulk export to PNG, JPEG, WebP, TGA, BMP, TIFF, or ICO — straight into a folder you pick, or as a ZIP. Built for game devs and artists.</p>
+      <div class="card-tags">
+        <span class="tag">PWA</span><span class="tag">Offline</span><span class="tag">Sprite sheets</span><span class="tag">Batch export</span>
+      </div>
+      <div class="card-actions">
+        <a href="./teqslice/" class="btn-card primary">Open TeqSlice →</a>
+        <a href="https://github.com/teqvault" class="btn-card ghost" target="_blank" rel="noopener">Source</a>
+      </div>
+    </div>
+
+    <!-- TeqXus AI -->
+    <div class="tool-card reveal">
+      <div class="card-head">
+        <div class="card-icon purple">⚡</div>
+        <div class="card-meta">
+          <div class="card-name">TeqXus AI</div>
+          <div class="card-url">teqxus.app</div>
+        </div>
+        <span class="status live"><span class="pip"></span>Live</span>
+      </div>
+      <p class="card-desc">A lightweight AI assistant built for low-data environments and multilingual communities across Africa and beyond. 7 languages, offline queue, and a $2.99/mo Pro tier that unlocks Claude Sonnet and unlimited daily messages.</p>
+      <div class="card-tags">
+        <span class="tag">AI</span><span class="tag">Offline-capable</span><span class="tag">7 languages</span><span class="tag">2G/3G</span>
+      </div>
+      <div class="card-actions">
+        <a href="https://teqxus.app" class="btn-card primary" target="_blank" rel="noopener">Open TeqXus →</a>
+      </div>
+    </div>
+
+    <!-- TeqDocs -->
+    <div class="tool-card reveal">
+      <div class="card-head">
+        <div class="card-icon amber">📖</div>
+        <div class="card-meta">
+          <div class="card-name">TeqDocs</div>
+          <div class="card-url">teqxus.app/teqdocs</div>
+        </div>
+        <span class="status live"><span class="pip"></span>Live</span>
+      </div>
+      <p class="card-desc">A full offline document reader and writing companion. Opens PDF, Word, Markdown, and plain text with zero upload — files stay on your device. Annotate, sign, split, merge PDFs, write Markdown, and export in multiple formats.</p>
+      <div class="card-tags">
+        <span class="tag">PDF</span><span class="tag">Word</span><span class="tag">Markdown</span><span class="tag">Offline</span><span class="tag">Windows app</span>
+      </div>
+      <div class="card-actions">
+        <a href="https://teqxus.app/teqdocs" class="btn-card primary" target="_blank" rel="noopener">Open TeqDocs →</a>
+        <a href="https://github.com/teqvault/teqdocsDesktop/releases/download/2.0.0/TeqDocs.Student.Setup.2.0.0.exe" class="btn-card ghost">Download for Windows</a>
+      </div>
+    </div>
+
+    <!-- TeqCarve -->
+    <div class="tool-card reveal">
+      <div class="card-head">
+        <div class="card-icon pink">🔍</div>
+        <div class="card-meta">
+          <div class="card-name">TeqCarve</div>
+          <div class="card-url">github.com/teqvault</div>
+        </div>
+        <span class="status live"><span class="pip"></span>Live</span>
+      </div>
+      <p class="card-desc">A raw file carving and data recovery tool with both a CLI and a GUI. Recovers JPEG, PNG, HEIC, WebP, PDF, ZIP, Office documents, MP4, MP3, and more from raw disk images or damaged drives. Packaged as a standalone Windows executable — no Python required.</p>
+      <div class="card-tags">
+        <span class="tag">Data recovery</span><span class="tag">CLI + GUI</span><span class="tag">Windows</span><span class="tag">Offline</span>
+      </div>
+      <div class="card-actions">
+        <a href="https://github.com/teqvault" class="btn-card primary" target="_blank" rel="noopener">Get TeqCarve →</a>
+      </div>
+    </div>
+
+    <!-- TeqStudy -->
+    <div class="tool-card reveal">
+      <div class="card-head">
+        <div class="card-icon green">🎓</div>
+        <div class="card-meta">
+          <div class="card-name">TeqStudy</div>
+          <div class="card-url">teqvault.study</div>
+        </div>
+        <span class="status live"><span class="pip"></span>Live</span>
+      </div>
+      <p class="card-desc">Interactive programming courses in plain HTML — no framework, no account, no build step. Java, Python, cybersecurity for beginners, and JUnit 5 unit testing. Runs offline. Designed around active recall and short lessons rather than passive video.</p>
+      <div class="card-tags">
+        <span class="tag">Java</span><span class="tag">Python</span><span class="tag">Cybersecurity</span><span class="tag">Offline</span><span class="tag">Free</span>
+      </div>
+      <div class="card-actions">
+        <a href="https://teqvault.study" class="btn-card primary" target="_blank" rel="noopener">Open TeqStudy →</a>
+      </div>
+    </div>
+
+    <!-- TeqDocs Military -->
+    <div class="tool-card reveal">
+      <div class="card-head">
+        <div class="card-icon teal">🪪</div>
+        <div class="card-meta">
+          <div class="card-name">TeqDocs Military</div>
+          <div class="card-url">in development</div>
+        </div>
+        <span class="status dev"><span class="pip"></span>Dev</span>
+      </div>
+      <p class="card-desc">A DoD-compliant offline document platform built for military personnel. CAC/PIV digital signing, offline PDF editing, and form fill — no internet connection required for core functionality. Designed with OPSEC as a first principle, not an afterthought.</p>
+      <div class="card-tags">
+        <span class="tag">CAC signing</span><span class="tag">DoD</span><span class="tag">Offline</span><span class="tag">PDF</span>
+      </div>
+      <div class="card-actions">
+        <span class="btn-card disabled">In Development</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── about strip ── -->
+<div class="about-strip" id="about">
+  <div class="about-inner">
+    <div class="reveal">
+      <h2>Built by the same<br>people who make the games.</h2>
+      <p>Teq Vault LLC is a solo-founded studio in Bossier City, Louisiana. Every tool here was built to solve a real problem — not to have a product page. TeqDocs started because no offline reader handled all three formats cleanly. TeqSlice exists because slicing sprite sheets in Photoshop costs money and requires installation. TeqCarve because data recovery tools either cost hundreds or have terrible UX.</p>
+      <p>Same engineering discipline that goes into the games. Fewer features than the big tools, but the right features, working offline, for free.</p>
+    </div>
+    <div class="about-links reveal">
+      <a href="https://teqvault.online" class="about-link" target="_blank" rel="noopener">
+        <span class="about-link-icon">🏛</span>
+        <span class="about-link-text">
+          <strong>Teq Vault LLC</strong>
+          <span>Games, IP, full studio overview — teqvault.online</span>
+        </span>
+        <span class="about-link-arrow">→</span>
+      </a>
+      <a href="https://teqxus.app" class="about-link" target="_blank" rel="noopener">
+        <span class="about-link-icon">⚡</span>
+        <span class="about-link-text">
+          <strong>TeqXus AI</strong>
+          <span>AI assistant · teqxus.app</span>
+        </span>
+        <span class="about-link-arrow">→</span>
+      </a>
+      <a href="https://eyuforyia.com" class="about-link" target="_blank" rel="noopener">
+        <span class="about-link-icon">🌍</span>
+        <span class="about-link-text">
+          <strong>Eyuforyia Universe</strong>
+          <span>The games, books, and world — eyuforyia.com</span>
+        </span>
+        <span class="about-link-arrow">→</span>
+      </a>
+      <a href="https://ko-fi.com/teqvault" class="about-link" target="_blank" rel="noopener">
+        <span class="about-link-icon">☕</span>
+        <span class="about-link-text">
+          <strong>Support on Ko-fi</strong>
+          <span>Keep the tools free and maintained</span>
+        </span>
+        <span class="about-link-arrow">→</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── footer ── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="footer-logo">TEQVAULT TOOLS</div>
+      <p>Standalone utilities built by Teq Vault LLC. No accounts. No subscriptions. Just tools that work.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Tools</h4>
+      <a href="./teqslice/">TeqSlice</a>
+      <a href="https://teqxus.app" target="_blank" rel="noopener">TeqXus AI</a>
+      <a href="https://teqxus.app/teqdocs" target="_blank" rel="noopener">TeqDocs</a>
+      <a href="https://github.com/teqvault" target="_blank" rel="noopener">TeqCarve</a>
+      <a href="https://teqvault.study" target="_blank" rel="noopener">TeqStudy</a>
+    </div>
+    <div class="footer-col">
+      <h4>Teq Vault</h4>
+      <a href="https://teqvault.online" target="_blank" rel="noopener">Studio</a>
+      <a href="https://teqvault.online/pages/ecosystem.html" target="_blank" rel="noopener">Ecosystem</a>
+      <a href="https://teqvault.online/pages/library.html" target="_blank" rel="noopener">IP Library</a>
+      <a href="https://teqvault.online/pages/join-the-vault.html" target="_blank" rel="noopener">Careers</a>
+    </div>
+    <div class="footer-col">
+      <h4>Contact</h4>
+      <a href="mailto:support@teqvault.online">support@teqvault.online</a>
+      <a href="https://discord.gg/4CAYz2ZCqC" target="_blank" rel="noopener">Discord</a>
+      <a href="https://ko-fi.com/teqvault" target="_blank" rel="noopener">Ko-fi</a>
+      <a href="https://teqvault.online/pages/terms.html" target="_blank" rel="noopener">Terms</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© <span id="yr"></span> Teq Vault LLC · Bossier City, Louisiana · All rights reserved.</span>
+    <span>Built by the same people who make the games.</span>
+  </div>
+</footer>
+
+<script>
+/* year */
+document.getElementById("yr").textContent = new Date().getFullYear();
+
+/* scroll reveal */
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add("on"); obs.unobserve(e.target); } });
+}, { threshold: 0.1 });
+document.querySelectorAll(".reveal").forEach(el => obs.observe(el));
+
+/* stagger tool cards */
+document.querySelectorAll(".tool-card.reveal").forEach((el, i) => {
+  el.style.transitionDelay = (i % 3) * 0.08 + "s";
+});
+</script>
+</body>
+</html>
