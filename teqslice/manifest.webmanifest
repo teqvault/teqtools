@@ -1,0 +1,15 @@
+{
+  "name": "TeqSlice — image slicing tool",
+  "short_name": "TeqSlice",
+  "description": "Photoshop-style image slicer: draw slices, grid slice sprite sheets, guides, and batch export to PNG/JPEG/WebP.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16171b",
+  "theme_color": "#16171b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
