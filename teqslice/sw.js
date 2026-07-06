@@ -1,4 +1,4 @@
-const VERSION = "teqslice-v7";
+const VERSION = "teqslice-v12";
 const ASSETS = ["./","./index.html","./jszip.min.js","./manifest.webmanifest","./icon-192.png","./icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

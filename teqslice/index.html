@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>TeqSlice — image slicing tool</title>
+<title>TeqSlice &mdash; image slicing tool</title>
 <meta name="theme-color" content="#16171b">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -126,7 +126,46 @@ footer{
 }
 footer .mono{color:var(--ink)}
 
-/* ---------- dialogs ---------- */
+/* ---------- animation preview ---------- */
+#animOverlay{
+  position:fixed; inset:0; z-index:200; background:rgba(10,11,14,.92);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:16px;
+}
+#animOverlay.hide{display:none}
+#animCanvas{
+  image-rendering:pixelated; image-rendering:crisp-edges;
+  border-radius:8px; border:1px solid var(--edge);
+  background:#22242b; max-width:90vw; max-height:70vh;
+}
+.anim-controls{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;
+}
+.anim-controls label{color:var(--dim); font-size:12px}
+.anim-btn{
+  background:var(--panel2); border:1px solid var(--edge); border-radius:8px;
+  color:var(--ink); padding:7px 16px; font:inherit; cursor:pointer; font-size:13px;
+}
+.anim-btn:hover{background:#2d3039}
+.anim-btn.on{background:var(--accent); color:#06232f; border-color:transparent}
+#animClose{
+  position:absolute; top:20px; right:24px;
+  background:transparent; border:none; color:var(--dim); font-size:22px; cursor:pointer;
+}
+#animClose:hover{color:var(--ink)}
+#animInfo{color:var(--dim); font-size:12px; font-family:ui-monospace,monospace}
+/* ---------- templates ---------- */
+#templateList{display:flex; flex-direction:column; gap:4px; margin-bottom:8px; max-height:160px; overflow-y:auto}
+.tmpl-row{
+  display:flex; align-items:center; gap:6px; padding:5px 8px;
+  background:var(--panel2); border:1px solid var(--edge); border-radius:8px;
+}
+.tmpl-name{flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.tmpl-meta{font-size:10px; color:var(--faint); font-family:ui-monospace,monospace; white-space:nowrap}
+.tmpl-apply{padding:3px 10px; font-size:11px; font-weight:600; background:var(--accent); color:#06232f; border:none; border-radius:5px; cursor:pointer}
+.tmpl-apply:hover{background:#6ad4ff}
+.tmpl-del{padding:3px 6px; color:var(--faint); background:transparent; border:none; cursor:pointer; border-radius:4px}
+.tmpl-del:hover{color:#ff7a7a; background:#3a2226}
 dialog{
   background:var(--panel); color:var(--ink); border:1px solid var(--edge);
   border-radius:12px; padding:16px; min-width:300px; box-shadow:0 20px 60px rgba(0,0,0,.5);
@@ -161,7 +200,13 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
     <button class="tool" id="toolSelect"    title="Slice Select (V)">⇱</button>
     <button class="tool" id="toolSlice"     title="Slice (C)">◫</button>
     <button class="tool" id="toolTransform" title="Free Transform — resize image (T)">⤢</button>
-    <button class="tool" id="toolHand"      title="Hand (H / hold Space)">✋</button>
+    <button class="tool" id="toolErase"     title="Erase — brush to transparent (E)">🧹</button>
+    <button class="tool" id="toolHand"      title="Hand (H / hold Space / Middle-mouse drag)">✋</button>
+  </div>
+  <div id="eraseOpts" style="display:none; align-items:center; gap:6px; margin-right:4px">
+    <label style="color:var(--dim); font-size:11px">Size</label>
+    <input type="range" id="eraseSize" min="2" max="200" value="24" style="width:90px">
+    <span id="eraseSizeVal" class="mono" style="color:var(--dim); font-size:11px; min-width:28px">24px</span>
   </div>
 
   <div class="sep"></div>
@@ -174,6 +219,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <button class="btn" id="btnClearGuides">Clear guides</button>
 
   <div class="spacer"></div>
+  <button class="btn" id="btnPreview" disabled title="Animation Preview (P)">▶ Preview</button>
   <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
   <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
   <div class="sep"></div>
@@ -214,6 +260,9 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
         <button class="btn" id="txCancel">Cancel<kbd>Esc</kbd></button>
       </div>
     </section>
+
+    <section>
+      <h2>Slice properties</h2>
       <div id="propNone" class="empty">No slice selected. Draw one with the Slice tool (C), or click one with Slice Select (V).</div>
       <div id="propBox" style="display:none">
         <div class="row grow"><label>Name</label><input type="text" id="pName"></div>
@@ -239,6 +288,14 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
           <button class="btn" id="btnDup">Duplicate<kbd>⌘D</kbd></button>
           <button class="btn" id="btnDel">Delete<kbd>Del</kbd></button>
         </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Slice Templates</h2>
+      <div id="templateList"><div class="empty">No templates saved.</div></div>
+      <div class="row" style="gap:6px">
+        <button class="btn" id="btnSaveTemplate" disabled>Save current grid…</button>
       </div>
     </section>
 
@@ -289,6 +346,34 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
     </section>
 
     <section>
+      <h2>Batch process <span style="color:var(--faint); font-weight:400; text-transform:none; letter-spacing:0">— multiple images</span></h2>
+      <div style="color:var(--dim); font-size:12px; margin-bottom:8px">Load several images, slice them all with the current grid (or a saved template), then export every result at once.</div>
+      <div id="batchDrop" style="
+        border:2px dashed var(--edge); border-radius:10px; padding:14px 10px;
+        text-align:center; color:var(--faint); font-size:12px; cursor:pointer;
+        transition:border-color .2s; margin-bottom:8px;
+      ">Drop images here<br><span style="font-size:11px; color:var(--faint)">or click to pick files</span></div>
+      <input type="file" id="batchFileInput" accept="image/*" multiple hidden>
+      <div id="batchQueue" style="display:none; margin-bottom:8px">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
+          <span id="batchQueueLabel" style="font-size:12px; color:var(--dim)">0 images queued</span>
+          <button class="btn" id="btnBatchClear" style="padding:2px 8px; font-size:11px">Clear</button>
+        </div>
+        <div id="batchFileList" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:2px"></div>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <label class="check"><input type="checkbox" id="batchUseTemplate"> Use template:</label>
+        <select id="batchTemplate" style="flex:1; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit; font-size:12px">
+          <option value="">— pick one —</option>
+        </select>
+      </div>
+      <div style="color:var(--faint); font-size:10px; margin-bottom:8px">Unchecked: uses whatever grid is currently sliced on the open image.</div>
+      <div class="row grow">
+        <button class="btn primary" id="btnBatchRun" disabled>Process &amp; export all…</button>
+      </div>
+    </section>
+
+    <section>
       <h2>View</h2>
       <label class="check"><input type="checkbox" id="optSnap" checked> Snap to edges, slices &amp; guides</label>
       <label class="check"><input type="checkbox" id="optDim" checked> Dim area outside slices</label>
@@ -312,6 +397,47 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <span class="spacer"></span>
   <span id="sHint">V select · C slice · H hand · drag from rulers for guides · double-click a guide to remove it</span>
 </footer>
+
+<!-- Batch Progress Overlay -->
+<div id="batchOverlay" style="
+  display:none; position:fixed; inset:0; z-index:201; background:rgba(10,11,14,.94);
+  align-items:center; justify-content:center; gap:20px;
+">
+  <div style="background:var(--panel); border:1px solid var(--edge); border-radius:16px; padding:28px 36px; min-width:380px; max-width:520px">
+    <div style="font-size:15px; font-weight:600; margin-bottom:16px">Batch Process</div>
+    <div id="batchCurrentFile" style="font-size:12px; color:var(--dim); margin-bottom:10px; font-family:ui-monospace,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></div>
+    <div style="background:var(--bg); border-radius:8px; height:8px; overflow:hidden; margin-bottom:8px">
+      <div id="batchBar" style="height:100%; background:var(--accent); width:0%; transition:width .2s; border-radius:8px"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--faint)">
+      <span id="batchProgressText">0 / 0</span>
+      <span id="batchPct">0%</span>
+    </div>
+    <div id="batchErrors" style="margin-top:12px; display:none; max-height:80px; overflow-y:auto"></div>
+    <div id="batchDone" style="display:none; margin-top:14px; text-align:center">
+      <div style="color:var(--guide); font-size:14px; font-weight:600; margin-bottom:12px">✓ Batch complete</div>
+      <button class="btn primary" id="btnBatchClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Animation Preview Overlay -->
+<div id="animOverlay" class="hide">
+  <button id="animClose" title="Close (Esc)">✕</button>
+  <canvas id="animCanvas"></canvas>
+  <div id="animInfo">frame 1 / 1 &nbsp;·&nbsp; 0×0</div>
+  <div class="anim-controls">
+    <button class="anim-btn" id="animPrev" title="Previous frame">⏮</button>
+    <button class="anim-btn" id="animPlayPause" title="Play/Pause (Space)">▶ Play</button>
+    <button class="anim-btn" id="animNext" title="Next frame">⏭</button>
+    <div class="sep"></div>
+    <label>FPS <input type="number" id="animFps" value="12" min="1" max="60" style="width:46px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <button class="anim-btn" id="animPingpong" title="Ping-pong mode">⇄</button>
+    <button class="anim-btn" id="animLoop" title="Loop" style="min-width:60px">Loop ✓</button>
+    <div class="sep"></div>
+    <span id="animScale" style="color:var(--dim); font-size:12px"></span>
+  </div>
+</div>
 
 <!-- hidden inputs -->
 <input type="file" id="fileImg" accept="image/*" hidden>
@@ -757,6 +883,25 @@ function applyTransform(nw, nh, altKey){
   refreshAll();
 }
 
+/* ============================== erase tool ============================== */
+function eraseAt(px,py){
+  if(!S.img) return;
+  // S.img is always a canvas (converted on load) so we can write directly to it
+  const ictx = S.img.getContext("2d");
+  const wx = s2wX(px), wy = s2wY(py);
+  const r = (+$("eraseSize").value)/2;
+  ictx.save();
+  ictx.globalCompositeOperation = "destination-out";
+  ictx.beginPath();
+  ictx.arc(wx, wy, r, 0, Math.PI*2);
+  ictx.fill();
+  ictx.restore();
+}
+$("eraseSize").addEventListener("input",()=>{
+  $("eraseSizeVal").textContent = $("eraseSize").value+"px";
+  if(S.tool==="erase") updateCursor(cursorScreen?cursorScreen.x:null, cursorScreen?cursorScreen.y:null);
+});
+
 /* ============================== pointer interaction ============================== */
 let drag = null;      // active drag descriptor
 let spaceHeld = false;
@@ -766,16 +911,40 @@ function setTool(t){
   $("toolSelect").classList.toggle("on",t==="select");
   $("toolSlice").classList.toggle("on",t==="slice");
   $("toolTransform").classList.toggle("on",t==="transform");
+  $("toolErase").classList.toggle("on",t==="erase");
   $("toolHand").classList.toggle("on",t==="hand");
   $("transformPanel").style.display = t==="transform" ? "block":"none";
+  $("eraseOpts").style.display = t==="erase" ? "flex":"none";
   if(t==="transform" && S.img){ $("txW").value=S.W; $("txH").value=S.H; TX.active=true; }
   else { TX.active=false; TX.preview=null; }
   updateCursor();
 }
+function eraseCursorDiv(){
+  let el = document.getElementById("eraseCursor");
+  if(!el){
+    el = document.createElement("div");
+    el.id="eraseCursor";
+    el.style.cssText="position:fixed; pointer-events:none; z-index:50; border:1.5px solid #ffb54c; border-radius:50%; background:rgba(255,181,76,.12); display:none;";
+    document.body.appendChild(el);
+  }
+  return el;
+}
 function updateCursor(px,py){
   let c = "default";
   const t = spaceHeld ? "hand" : S.tool;
+  const eraseEl = eraseCursorDiv();
+  if(t!=="erase") eraseEl.style.display="none";
   if(t==="slice") c="crosshair";
+  else if(t==="erase"){
+    c="none";
+    if(px!=null && S.img){
+      const sizeCss=(+$("eraseSize").value)*S.zoom;
+      const r=cv.getBoundingClientRect();
+      eraseEl.style.width=sizeCss+"px"; eraseEl.style.height=sizeCss+"px";
+      eraseEl.style.left=(r.left+px-sizeCss/2)+"px"; eraseEl.style.top=(r.top+py-sizeCss/2)+"px";
+      eraseEl.style.display="block";
+    }
+  }
   else if(t==="hand") c = drag&&drag.type==="pan" ? "grabbing" : "grab";
   else if(t==="transform" && px!=null){
     const hi=hitTxHandle(px,py);
@@ -819,11 +988,21 @@ function hitGuide(px,py){
   return null;
 }
 
+cv.addEventListener("pointerleave", ()=>{
+  const el=document.getElementById("eraseCursor");
+  if(el) el.style.display="none";
+});
+
+cv.addEventListener("mousedown", e=>{ if(e.button===1) e.preventDefault(); });
+cv.addEventListener("auxclick", e=>{ if(e.button===1) e.preventDefault(); });
+
 cv.addEventListener("pointerdown", e=>{
   if(!S.img) return;
   cv.setPointerCapture(e.pointerId);
   const px=e.offsetX, py=e.offsetY;
   const t = (spaceHeld || e.button===1) ? "hand" : S.tool;
+
+  if(t==="hand"){ drag={type:"pan", sx:px, sy:py, ox:S.ox, oy:S.oy}; updateCursor(); return; }
 
   if(t==="transform" && e.button===0){
     const hi=hitTxHandle(px,py);
@@ -837,6 +1016,19 @@ cv.addEventListener("pointerdown", e=>{
     return;
   }
   if(e.button!==0) return;
+
+  if(t==="erase"){
+    pushUndo();
+    // clone the canvas so the undo snapshot we just took (which holds a
+    // reference to the pre-erase canvas) isn't mutated by this stroke
+    const clone=document.createElement("canvas");
+    clone.width=S.img.width; clone.height=S.img.height;
+    clone.getContext("2d").drawImage(S.img,0,0);
+    S.img=clone;
+    drag={type:"erase"};
+    eraseAt(px,py);
+    return;
+  }
 
   if(t==="slice"){
     const c = snapCandidates(null);
@@ -872,6 +1064,13 @@ cv.addEventListener("pointermove", e=>{
     $("sPos").textContent = `${Math.round(wx)}, ${Math.round(wy)}`;
   }
   if(!drag){ updateCursor(px,py); draw(); return; }
+
+  if(drag.type==="erase"){
+    updateCursor(px,py);
+    eraseAt(px,py);
+    draw();
+    return;
+  }
 
   if(drag.type==="pan"){
     S.ox = drag.ox + (px-drag.sx); S.oy = drag.oy + (py-drag.sy);
@@ -1076,7 +1275,12 @@ function refreshList(){
     list.appendChild(row);
   });
 }
-function refreshAll(){ syncProps(); refreshList(); draw(); }
+function refreshAll(){
+  syncProps(); refreshList();
+  $("btnPreview").disabled = !S.img || S.slices.length===0;
+  $("btnSaveTemplate").disabled = !S.slices.length;
+  draw();
+}
 
 /* property inputs */
 $("pName").addEventListener("change",()=>{ const sl=selected(); if(!sl)return; pushUndo(); sl.name=$("pName").value||sl.name; refreshAll(); });
@@ -1117,7 +1321,10 @@ function loadImageFile(file){
   const url=URL.createObjectURL(file);
   const im=new Image();
   im.onload=()=>{
-    S.img=im; S.W=im.naturalWidth; S.H=im.naturalHeight;
+    const c=document.createElement("canvas");
+    c.width=im.naturalWidth; c.height=im.naturalHeight;
+    c.getContext("2d").drawImage(im,0,0);
+    S.img=c; S.W=c.width; S.H=c.height;
     S.name=(file.name||"image").replace(/\.[^.]+$/,"");
     S.slices=[]; S.guides={v:[],h:[]}; S.selId=null;
     undoStack=[]; redoStack=[]; updateUndoButtons();
@@ -1447,13 +1654,14 @@ async function encodeICO(canvas){ // PNG-in-ICO; auto-fits to 256px max
   return new Blob([buf],{type:"image/x-icon"});
 }
 
-async function renderSlice(sl,scale,fmt,quality){
+async function renderSlice(sl,scale,fmt,quality,srcImg){
+  const img = srcImg || S.img;
   const c=document.createElement("canvas");
   c.width=Math.max(1,Math.round(sl.w*scale)); c.height=Math.max(1,Math.round(sl.h*scale));
   const x=c.getContext("2d");
   x.imageSmoothingEnabled = !(S.pixel && scale>=1);
   if(fmt==="jpeg"){ x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height); }
-  x.drawImage(S.img, sl.x,sl.y,sl.w,sl.h, 0,0,c.width,c.height);
+  x.drawImage(img, sl.x,sl.y,sl.w,sl.h, 0,0,c.width,c.height);
   if(CANVAS_FMTS.includes(fmt)) return toBlobP(c,"image/"+fmt,quality);
   if(fmt==="ico") return encodeICO(c);
   const id=x.getImageData(0,0,c.width,c.height);
@@ -1588,7 +1796,10 @@ $("fileProj").addEventListener("change",e=>{
       if(!d.image) throw 0;
       const im=new Image();
       im.onload=()=>{
-        S.img=im; S.W=im.naturalWidth; S.H=im.naturalHeight;
+        const c=document.createElement("canvas");
+        c.width=im.naturalWidth; c.height=im.naturalHeight;
+        c.getContext("2d").drawImage(im,0,0);
+        S.img=c; S.W=c.width; S.H=c.height;
         S.name=d.name||"image";
         S.slices=(d.slices||[]).map(s=>({format:"",...s}));
         nextId = Math.max(0,...S.slices.map(s=>s.id))+1;
@@ -1616,6 +1827,7 @@ $("btnZoomOut").addEventListener("click",()=>{ const r=viewport.getBoundingClien
 $("toolSelect").addEventListener("click",()=>setTool("select"));
 $("toolSlice").addEventListener("click",()=>setTool("slice"));
 $("toolTransform").addEventListener("click",()=>{ if(S.img) setTool("transform"); });
+$("toolErase").addEventListener("click",()=>{ if(S.img) setTool("erase"); });
 $("toolHand").addEventListener("click",()=>setTool("hand"));
 // transform sidebar
 $("txW").addEventListener("change",()=>{
@@ -1645,6 +1857,7 @@ window.addEventListener("keydown",e=>{
   if(mod && e.key.toLowerCase()==="e"){ e.preventDefault(); exportDefault(); return; }
   switch(e.key){
     case "t": case "T": if(S.img) setTool("transform"); break;
+    case "e": case "E": if(S.img) setTool("erase"); break;
     case "c": case "C": setTool("slice"); break;
     case "h": case "H": setTool("hand"); break;
     case "Delete": case "Backspace": delSelected(); break;
@@ -1672,11 +1885,365 @@ window.addEventListener("keyup",e=>{
   if(e.code==="Space"){ spaceHeld=false; updateCursor(); }
 });
 
-/* ============================== boot ============================== */
+/* ============================== slice templates ============================== */
+const TMPL_KEY = "teqslice_templates";
+function loadTemplates(){ try{ return JSON.parse(localStorage.getItem(TMPL_KEY)||"[]"); }catch{ return []; } }
+function saveTemplates(t){ localStorage.setItem(TMPL_KEY, JSON.stringify(t)); }
+
+function renderTemplateList(){
+  const list = $("templateList");
+  const tmpls = loadTemplates();
+  if(!tmpls.length){ list.innerHTML='<div class="empty">No templates saved.</div>'; return; }
+  list.innerHTML = "";
+  tmpls.forEach((t,i)=>{
+    const row = document.createElement("div"); row.className="tmpl-row";
+    const name = document.createElement("span"); name.className="tmpl-name"; name.textContent=t.name;
+    const meta = document.createElement("span"); meta.className="tmpl-meta";
+    meta.textContent = t.uniform
+      ? `${t.cols}×${t.rows} · ${t.tileW}×${t.tileH}px`
+      : `${t.cols}×${t.rows} · auto`;
+    const apply = document.createElement("button"); apply.className="tmpl-apply"; apply.textContent="Apply";
+    apply.addEventListener("click",()=>applyTemplate(t));
+    const del = document.createElement("button"); del.className="tmpl-del"; del.textContent="✕";
+    del.title="Delete template";
+    del.addEventListener("click",()=>{
+      const ts=loadTemplates(); ts.splice(i,1); saveTemplates(ts); renderTemplateList();
+    });
+    row.append(name, meta, apply, del);
+    list.appendChild(row);
+  });
+}
+
+function applyTemplate(t){
+  if(!S.img) return;
+  if(S.slices.length){
+    if(!confirm(`Apply template "${t.name}"? This will replace all ${S.slices.length} existing slice(s).`)) return;
+  }
+  pushUndo();
+  S.slices=[]; S.selId=null;
+  const rs = segsCount(0, S.H, t.rows, t.uniform);
+  const cs = segsCount(0, S.W, t.cols, t.uniform);
+  rs.forEach((r,ri)=>cs.forEach((c,ci)=>{
+    const sl=newSlice(c.s,r.s,c.z,r.z);
+    sl.name=`${S.name}_r${ri+1}c${ci+1}`;
+  }));
+  flashStatus(`Applied template "${t.name}" — ${t.rows}×${t.cols} grid`);
+  refreshAll();
+}
+
+$("btnSaveTemplate").addEventListener("click",()=>{
+  if(!S.slices.length) return;
+  // Detect grid from current slices
+  const xs=[...new Set(S.slices.map(s=>s.x))].sort((a,b)=>a-b);
+  const ys=[...new Set(S.slices.map(s=>s.y))].sort((a,b)=>a-b);
+  const cols=xs.length, rows=ys.length;
+  const ws=[...new Set(S.slices.map(s=>s.w))];
+  const hs=[...new Set(S.slices.map(s=>s.h))];
+  const uniform = ws.length===1&&hs.length===1;
+  const tileW=ws[0], tileH=hs[0];
+  const suggested=`${S.name} ${cols}\xd7${rows}`;
+  const name=prompt("Template name:", suggested);
+  if(!name) return;
+  const tmpls=loadTemplates();
+  tmpls.push({name, rows, cols, tileW, tileH, uniform});
+  saveTemplates(tmpls);
+  renderTemplateList();
+  batchRefreshUI();
+  flashStatus(`Template "${name}" saved`);
+});
+
+/* ============================== animation preview ============================== */
+const ANIM = {
+  playing: false,
+  pingpong: false,
+  loop: true,
+  dir: 1,
+  frame: 0,
+  fps: 12,
+  timer: null,
+  frames: []  // ImageBitmap array
+};
+const animCv = $("animCanvas");
+const animCtx = animCv.getContext("2d");
+
+async function openPreview(){
+  const slices = orderedSlices();
+  if(!slices.length || !S.img) return;
+
+  // Build frames from current slices
+  ANIM.frames = await Promise.all(slices.map(sl=>{
+    const c=document.createElement("canvas"); c.width=sl.w; c.height=sl.h;
+    c.getContext("2d").drawImage(S.img, sl.x,sl.y,sl.w,sl.h, 0,0,sl.w,sl.h);
+    return createImageBitmap(c);
+  }));
+
+  ANIM.frame=0; ANIM.dir=1; ANIM.fps=+$("animFps").value||12;
+
+  // Size canvas to first frame, max 90vw/70vh
+  const fw=ANIM.frames[0].width, fh=ANIM.frames[0].height;
+  const maxW=Math.floor(window.innerWidth*.88), maxH=Math.floor(window.innerHeight*.68);
+  const scale=Math.min(1, maxW/fw, maxH/fh);
+  const dw=Math.max(1,Math.round(fw*scale)), dh=Math.max(1,Math.round(fh*scale));
+  animCv.width=dw; animCv.height=dh;
+  animCv.style.width=dw+"px"; animCv.style.height=dh+"px";
+  $("animScale").textContent = scale<1 ? `${Math.round(scale*100)}% zoom` : "1:1";
+
+  $("animOverlay").classList.remove("hide");
+  drawAnimFrame();
+  if(ANIM.playing) startAnim();
+}
+
+function drawAnimFrame(){
+  const f=ANIM.frames[ANIM.frame];
+  if(!f) return;
+  animCtx.clearRect(0,0,animCv.width,animCv.height);
+  animCtx.imageSmoothingEnabled=false;
+  animCtx.drawImage(f,0,0,animCv.width,animCv.height);
+  $("animInfo").textContent=`frame ${ANIM.frame+1} / ${ANIM.frames.length}  ·  ${f.width}×${f.height}`;
+}
+
+function startAnim(){
+  stopAnim();
+  ANIM.playing=true;
+  $("animPlayPause").textContent="⏸ Pause";
+  ANIM.timer=setInterval(()=>{
+    const n=ANIM.frames.length;
+    ANIM.frame+=ANIM.dir;
+    if(ANIM.pingpong){
+      if(ANIM.frame>=n){ ANIM.frame=n-2; ANIM.dir=-1; }
+      if(ANIM.frame<0){ ANIM.frame=1; ANIM.dir=1; }
+    } else {
+      if(ANIM.frame>=n){ ANIM.frame=ANIM.loop?0:n-1; if(!ANIM.loop) stopAnim(); }
+      if(ANIM.frame<0) ANIM.frame=ANIM.loop?n-1:0;
+    }
+    drawAnimFrame();
+  }, 1000/Math.max(1,ANIM.fps));
+}
+
+function stopAnim(){
+  clearInterval(ANIM.timer); ANIM.timer=null;
+  ANIM.playing=false;
+  $("animPlayPause").textContent="▶ Play";
+}
+
+function closePreview(){
+  stopAnim();
+  $("animOverlay").classList.add("hide");
+  ANIM.frames.forEach(f=>f.close&&f.close());
+  ANIM.frames=[];
+}
+
+$("btnPreview").addEventListener("click",openPreview);
+$("animClose").addEventListener("click",closePreview);
+
+$("animPlayPause").addEventListener("click",()=>{
+  if(ANIM.playing) stopAnim(); else startAnim();
+});
+$("animPrev").addEventListener("click",()=>{
+  stopAnim();
+  ANIM.frame=(ANIM.frame-1+ANIM.frames.length)%ANIM.frames.length; drawAnimFrame();
+});
+$("animNext").addEventListener("click",()=>{
+  stopAnim();
+  ANIM.frame=(ANIM.frame+1)%ANIM.frames.length; drawAnimFrame();
+});
+$("animFps").addEventListener("change",()=>{
+  ANIM.fps=Math.max(1,+$("animFps").value||12);
+  if(ANIM.playing){ startAnim(); }
+});
+$("animPingpong").addEventListener("click",()=>{
+  ANIM.pingpong=!ANIM.pingpong; ANIM.dir=1;
+  $("animPingpong").classList.toggle("on",ANIM.pingpong);
+});
+$("animLoop").addEventListener("click",()=>{
+  ANIM.loop=!ANIM.loop;
+  $("animLoop").textContent=ANIM.loop?"Loop ✓":"Loop ✗";
+});
+// keyboard inside preview
+$("animOverlay").addEventListener("keydown",e=>{
+  if(e.code==="Space"){ e.preventDefault(); if(ANIM.playing) stopAnim(); else startAnim(); }
+  if(e.key==="ArrowLeft"){ stopAnim(); ANIM.frame=(ANIM.frame-1+ANIM.frames.length)%ANIM.frames.length; drawAnimFrame(); }
+  if(e.key==="ArrowRight"){ stopAnim(); ANIM.frame=(ANIM.frame+1)%ANIM.frames.length; drawAnimFrame(); }
+  if(e.key==="Escape") closePreview();
+},true);
+// P key opens/closes preview
+window.addEventListener("keydown",e=>{
+  if(e.key==="p"||e.key==="P"){
+    const typing=document.activeElement?.tagName==="INPUT"||document.activeElement?.tagName==="TEXTAREA";
+    if(typing||document.querySelector("dialog[open]")) return;
+    if($("animOverlay").classList.contains("hide")) openPreview(); else closePreview();
+  }
+});
+
+/* ============================== batch process ============================== */
+const BATCH = { files: [] };
+
+function batchRefreshUI(){
+  const n = BATCH.files.length;
+  $("batchQueue").style.display = n ? "block" : "none";
+  $("batchQueueLabel").textContent = `${n} image${n!==1?"s":""} queued`;
+  $("btnBatchRun").disabled = n === 0;
+
+  const fl = $("batchFileList"); fl.innerHTML="";
+  BATCH.files.forEach((f,i)=>{
+    const row=document.createElement("div");
+    row.style.cssText="display:flex;align-items:center;gap:6px;padding:3px 6px;background:var(--panel2);border-radius:6px;font-size:11px";
+    const nm=document.createElement("span");
+    nm.style.cssText="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)";
+    nm.textContent=f.name;
+    const rm=document.createElement("button"); rm.textContent="✕";
+    rm.style.cssText="background:transparent;border:none;color:var(--faint);cursor:pointer;padding:0 4px";
+    rm.addEventListener("click",()=>{ BATCH.files.splice(i,1); batchRefreshUI(); });
+    row.append(nm,rm); fl.appendChild(row);
+  });
+
+  const sel=$("batchTemplate"); const cur=sel.value;
+  sel.innerHTML='<option value="">— pick one —</option>';
+  loadTemplates().forEach((t,i)=>{
+    const o=document.createElement("option"); o.value=i; o.textContent=t.name; sel.appendChild(o);
+  });
+  sel.value=cur;
+}
+
+function batchAddFiles(files){
+  const imgs=[...files].filter(f=>f.type.startsWith("image/"));
+  BATCH.files.push(...imgs);
+  batchRefreshUI();
+}
+
+const batchDropEl=$("batchDrop");
+batchDropEl.addEventListener("click",()=>$("batchFileInput").click());
+batchDropEl.addEventListener("dragover",e=>{ e.preventDefault(); batchDropEl.style.borderColor="var(--accent)"; });
+batchDropEl.addEventListener("dragleave",()=>{ batchDropEl.style.borderColor=""; });
+batchDropEl.addEventListener("drop",e=>{ e.preventDefault(); batchDropEl.style.borderColor=""; batchAddFiles(e.dataTransfer.files); });
+$("batchFileInput").addEventListener("change",e=>{ batchAddFiles(e.target.files); e.target.value=""; });
+$("btnBatchClear").addEventListener("click",()=>{ BATCH.files=[]; batchRefreshUI(); });
+
+function loadImgFromFile(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file);
+    const im=new Image();
+    im.onload=()=>{ URL.revokeObjectURL(url); res(im); };
+    im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("Failed to load "+file.name)); };
+    im.src=url;
+  });
+}
+
+function showBatchOverlay(){ const el=$("batchOverlay"); el.style.display="flex"; el.style.flexDirection="column"; }
+function hideBatchOverlay(){ $("batchOverlay").style.display="none"; }
+
+async function runBatch(){
+  if(!BATCH.files.length) return;
+
+  // resolve grid settings: saved template, or infer from current on-screen slices
+  const useTemplate = $("batchUseTemplate").checked;
+  const tmplIdx = $("batchTemplate").value;
+  let grid = null;
+  if(useTemplate && tmplIdx!==""){
+    grid = loadTemplates()[+tmplIdx];
+  } else if(S.slices.length){
+    const xs=[...new Set(S.slices.map(s=>s.x))].sort((a,b)=>a-b);
+    const ys=[...new Set(S.slices.map(s=>s.y))].sort((a,b)=>a-b);
+    const ws=[...new Set(S.slices.map(s=>s.w))];
+    const hs=[...new Set(S.slices.map(s=>s.h))];
+    grid={rows:ys.length, cols:xs.length, uniform:ws.length===1&&hs.length===1};
+  } else {
+    alert("No grid to apply. Either slice the currently open image first, or check \"Use template\" and pick one.");
+    return;
+  }
+
+  let rootHandle=null;
+  if(FOLDER_OK){
+    try{ rootHandle=await showDirectoryPicker({mode:"readwrite"}); }
+    catch(e){ return; } // user cancelled
+  }
+
+  const gFmt=$("xFormat").value, scale=+$("xScale").value, q=(+$("xQuality").value)/100;
+  const total=BATCH.files.length;
+  const errors=[];
+
+  showBatchOverlay();
+  $("batchDone").style.display="none";
+  $("batchErrors").style.display="none";
+  $("batchErrors").innerHTML="";
+  $("batchBar").style.width="0%";
+  $("batchProgressText").textContent=`0 / ${total}`;
+  $("batchPct").textContent="0%";
+
+  for(let fi=0; fi<total; fi++){
+    const file=BATCH.files[fi];
+    $("batchCurrentFile").textContent=file.name;
+
+    try{
+      const img=await loadImgFromFile(file);
+      const imgName=file.name.replace(/\.[^.]+$/,"");
+      const W=img.naturalWidth, H=img.naturalHeight;
+
+      const rs=segsCount(0,H,grid.rows,grid.uniform);
+      const cs=segsCount(0,W,grid.cols,grid.uniform);
+      const slices=[];
+      rs.forEach((r,ri)=>cs.forEach((c,ci)=>{
+        slices.push({name:`${imgName}_r${ri+1}c${ci+1}`, x:c.s, y:r.s, w:c.z, h:r.z, format:""});
+      }));
+
+      const meta={image:imgName, width:W, height:H, scale, slices:[]};
+
+      if(rootHandle){
+        const imgDir=await rootHandle.getDirectoryHandle(safeName(imgName),{create:true});
+        for(let i=0;i<slices.length;i++){
+          const sl=slices[i], fmt=sl.format||gFmt;
+          const blob=await renderSlice(sl,scale,fmt,q,img);
+          const fn=fileName(sl,i+1,extFor(fmt));
+          await writeToDir(imgDir,fn,blob);
+          meta.slices.push({file:fn,name:sl.name,x:sl.x,y:sl.y,w:sl.w,h:sl.h});
+        }
+        if($("xJson").checked)
+          await writeToDir(imgDir,"slices.json",new Blob([JSON.stringify(meta,null,2)],{type:"application/json"}));
+      } else {
+        const zip=new JSZip();
+        const dir=safeName(imgName)+"/";
+        for(let i=0;i<slices.length;i++){
+          const sl=slices[i], fmt=sl.format||gFmt;
+          const blob=await renderSlice(sl,scale,fmt,q,img);
+          const fn=fileName(sl,i+1,extFor(fmt));
+          zip.file(dir+fn,blob);
+          meta.slices.push({file:fn,name:sl.name,x:sl.x,y:sl.y,w:sl.w,h:sl.h});
+        }
+        if($("xJson").checked) zip.file(dir+"slices.json",JSON.stringify(meta,null,2));
+        const out=await zip.generateAsync({type:"blob"});
+        dl(out, safeName(imgName)+"-slices.zip");
+        await new Promise(r=>setTimeout(r,350));
+      }
+    } catch(err){
+      errors.push(`${file.name}: ${err.message||err}`);
+    }
+
+    const pct=Math.round((fi+1)/total*100);
+    $("batchBar").style.width=pct+"%";
+    $("batchProgressText").textContent=`${fi+1} / ${total}`;
+    $("batchPct").textContent=pct+"%";
+  }
+
+  $("batchCurrentFile").textContent="Done";
+  if(errors.length){
+    $("batchErrors").style.display="block";
+    $("batchErrors").innerHTML=errors.map(e=>`<div style="font-size:11px;color:#ff7a7a;margin-bottom:4px">${e}</div>`).join("");
+  }
+  $("batchDone").style.display="block";
+}
+
+$("btnBatchRun").addEventListener("click",runBatch);
+$("btnBatchClose").addEventListener("click",()=>{
+  hideBatchOverlay();
+  BATCH.files=[]; batchRefreshUI();
+});
+
 makeChecker();
 setTool("slice");
 syncQuality();
 updateUndoButtons();
+renderTemplateList();
+batchRefreshUI();
 resize();
 
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
