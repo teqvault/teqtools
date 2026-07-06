@@ -176,6 +176,7 @@ dialog{
   border-radius:12px; padding:16px; min-width:300px; box-shadow:0 20px 60px rgba(0,0,0,.5);
 }
 dialog::backdrop{background:rgba(0,0,0,.55)}
+#dlgRemoveBG::backdrop{background:rgba(0,0,0,.18)}
 dialog h3{font-size:14px; margin-bottom:12px}
 dialog .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px}
 fieldset{border:1px solid var(--edge); border-radius:8px; padding:8px 10px; margin-bottom:8px}
@@ -206,18 +207,32 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
     <button class="tool" id="toolSlice"     title="Slice (C)">◫</button>
     <button class="tool" id="toolTransform" title="Free Transform — resize image (T)">⤢</button>
     <button class="tool" id="toolErase"     title="Erase — brush to transparent (E)">🧹</button>
+    <button class="tool" id="toolClone"     title="Clone Stamp — Alt+Click to set source, drag to paint (S)">⎘</button>
     <button class="tool" id="toolHand"      title="Hand (H / hold Space / Middle-mouse drag)">✋</button>
   </div>
   <div id="eraseOpts" style="display:none; align-items:center; gap:6px; margin-right:4px">
     <label style="color:var(--dim); font-size:11px">Size</label>
     <input type="range" id="eraseSize" min="2" max="200" value="24" style="width:90px">
     <span id="eraseSizeVal" class="mono" style="color:var(--dim); font-size:11px; min-width:28px">24px</span>
+    <label style="color:var(--dim); font-size:11px; margin-left:6px">Feather</label>
+    <input type="range" id="eraseFeather" min="0" max="100" value="0" style="width:70px">
+    <span id="eraseFeatherVal" class="mono" style="color:var(--dim); font-size:11px; min-width:24px">0</span>
+  </div>
+  <div id="cloneOpts" style="display:none; align-items:center; gap:6px; margin-right:4px">
+    <label style="color:var(--dim); font-size:11px">Size</label>
+    <input type="range" id="cloneSize" min="2" max="200" value="40" style="width:90px">
+    <span id="cloneSizeVal" class="mono" style="color:var(--dim); font-size:11px; min-width:28px">40px</span>
+    <label style="color:var(--dim); font-size:11px; margin-left:6px">Feather</label>
+    <input type="range" id="cloneFeather" min="0" max="100" value="0" style="width:70px">
+    <span id="cloneFeatherVal" class="mono" style="color:var(--dim); font-size:11px; min-width:24px">0</span>
+    <span id="cloneHint" style="color:var(--faint); font-size:11px">Alt+Click to set source</span>
   </div>
 
   <div class="sep"></div>
   <button class="btn" id="btnOpen">Open image<kbd>⌘O</kbd></button>
   <button class="btn" id="btnResize">Resize…</button>
   <button class="btn" id="btnCanvas">Canvas…</button>
+  <button class="btn" id="btnRemoveBG" disabled>Remove BG…</button>
   <button class="btn" id="btnGrid">Grid slice…</button>
   <button class="btn" id="btnDivide" disabled>Divide slice…</button>
   <button class="btn" id="btnFromGuides">Slices from guides</button>
@@ -228,8 +243,8 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
   <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
   <div class="sep"></div>
-  <button class="btn" id="btnSave" title="Save project (Ctrl+S)">Save</button>
-  <button class="btn" id="btnSaveImage" disabled title="Save the working image as PNG/JPEG/etc (Ctrl+Shift+S)">Save Image…</button>
+  <button class="btn" id="btnSave" title="Save project (Ctrl+S)">Save Project</button>
+  <button class="btn" id="btnSaveImage" disabled title="Save the working image as PNG/JPEG/etc (Ctrl+Shift+S)">Save</button>
   <button class="btn" id="btnLoad" title="Open project">Load</button>
   <button class="btn" id="panelToggle">Panel</button>
 </header>
@@ -512,6 +527,33 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 
 <!-- Resize image dialog -->
 <!-- Save Image As dialog -->
+<!-- Remove Background dialog -->
+<dialog id="dlgRemoveBG">
+  <h3>Remove background</h3>
+  <div class="row"><label style="min-width:64px">Tolerance</label>
+    <input type="range" id="rbTolerance" min="1" max="100" value="30">
+    <span class="mono" id="rbTolVal" style="min-width:28px; color:var(--dim)">30</span>
+  </div>
+  <div class="row"><label style="min-width:64px">Feather</label>
+    <input type="range" id="rbFeather" min="0" max="60" value="12">
+    <span class="mono" id="rbFeatherVal" style="min-width:28px; color:var(--dim)">12</span>
+  </div>
+  <div id="rbStatus" style="color:var(--faint); font-size:11px; min-height:14px; margin:2px 0 4px"></div>
+  <div class="dlgNote">
+    Detects the background color touching the image's outer edge and removes
+    only that connected region, leaving the subject alone. Works well on flat
+    or near-flat backgrounds (sprite icons, sheets on a solid color). Drag the
+    sliders to preview live on the canvas behind this dialog — nothing is
+    changed until you click Remove background. Complex photo backgrounds
+    won't separate cleanly — that needs a real ML model, which this offline
+    tool doesn't include.
+  </div>
+  <div class="actions">
+    <button class="btn" id="rbCancel">Cancel</button>
+    <button class="btn primary" id="rbOk">Remove background</button>
+  </div>
+</dialog>
+
 <dialog id="dlgSaveImage">
   <h3>Save image as</h3>
   <div class="row grow"><label style="min-width:44px">Format</label>
@@ -700,7 +742,8 @@ function draw(){
   ctx.restore();
 
   ctx.imageSmoothingEnabled = !(S.pixel && S.zoom>=1);
-  ctx.drawImage(S.img, S.ox, S.oy, S.W*S.zoom, S.H*S.zoom);
+  const dispImg = currentDisplayImage();
+  ctx.drawImage(dispImg, S.ox, S.oy, S.W*S.zoom, S.H*S.zoom);
 
   // dim outside slices
   if(S.dim && S.slices.length){
@@ -709,7 +752,7 @@ function draw(){
     ctx.fillRect(S.ox,S.oy,S.W*S.zoom,S.H*S.zoom);
     for(const sl of S.slices){
       const sx=w2sX(sl.x), sy=w2sY(sl.y), sw=sl.w*S.zoom, sh=sl.h*S.zoom;
-      ctx.drawImage(S.img, sl.x,sl.y,sl.w,sl.h, sx,sy,sw,sh);
+      ctx.drawImage(dispImg, sl.x,sl.y,sl.w,sl.h, sx,sy,sw,sh);
     }
     ctx.restore();
   }
@@ -758,6 +801,36 @@ function draw(){
       }
     }
   });
+
+  // clone stamp source crosshair + live ghost preview of what will be pasted
+  if(S.tool==="clone" && S.img){
+    const pt = CLONE.live || CLONE.source;
+    if(pt){
+      const x=w2sX(pt.x), y=w2sY(pt.y);
+      ctx.save();
+      ctx.strokeStyle="#54e3a4"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(x-8,y); ctx.lineTo(x+8,y); ctx.moveTo(x,y-8); ctx.lineTo(x,y+8); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+    // ghost preview: only while hovering (not actively painting) so the
+    // user can line things up before committing a stroke
+    if(CLONE.source && !(drag && drag.type==="clone") && cursorScreen){
+      const rWorld=(+$("cloneSize").value)/2;
+      const rScreen=rWorld*S.zoom;
+      const scr=cursorScreen;
+      ctx.save();
+      ctx.globalAlpha=0.55;
+      ctx.beginPath(); ctx.arc(scr.x, scr.y, rScreen, 0, Math.PI*2); ctx.clip();
+      ctx.drawImage(S.img, CLONE.source.x-rWorld, CLONE.source.y-rWorld, rWorld*2, rWorld*2,
+                            scr.x-rScreen, scr.y-rScreen, rScreen*2, rScreen*2);
+      ctx.restore();
+      ctx.save();
+      ctx.strokeStyle="#54e3a4"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(scr.x, scr.y, rScreen, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   // free transform overlay (drawn on top of everything)
   if(TX.active) drawTransformOverlay();
@@ -923,22 +996,71 @@ function applyTransform(nw, nh, altKey){
 }
 
 /* ============================== erase tool ============================== */
+function makeBrushMask(r, featherPct){
+  // radial-gradient alpha stamp: feather=0 -> hard disk (old behavior),
+  // feather=100 -> soft falloff across the whole brush
+  const size=Math.max(1,Math.ceil(r*2));
+  const c=document.createElement("canvas"); c.width=size; c.height=size;
+  const x=c.getContext("2d");
+  const inner=Math.max(0, r*(1-featherPct/100));
+  const grad=x.createRadialGradient(r,r,inner, r,r,r);
+  grad.addColorStop(0,"rgba(255,255,255,1)");
+  grad.addColorStop(1,"rgba(255,255,255,0)");
+  x.fillStyle=grad;
+  x.beginPath(); x.arc(r,r,r,0,Math.PI*2); x.fill();
+  return c;
+}
 function eraseAt(px,py){
   if(!S.img) return;
   // S.img is always a canvas (converted on load) so we can write directly to it
   const ictx = S.img.getContext("2d");
   const wx = s2wX(px), wy = s2wY(py);
   const r = (+$("eraseSize").value)/2;
+  const feather = +$("eraseFeather").value;
+  const mask = makeBrushMask(r,feather);
   ictx.save();
   ictx.globalCompositeOperation = "destination-out";
-  ictx.beginPath();
-  ictx.arc(wx, wy, r, 0, Math.PI*2);
-  ictx.fill();
+  ictx.drawImage(mask, wx-r, wy-r);
   ictx.restore();
 }
 $("eraseSize").addEventListener("input",()=>{
   $("eraseSizeVal").textContent = $("eraseSize").value+"px";
   if(S.tool==="erase") updateCursor(cursorScreen?cursorScreen.x:null, cursorScreen?cursorScreen.y:null);
+});
+$("eraseFeather").addEventListener("input",()=>{
+  $("eraseFeatherVal").textContent = $("eraseFeather").value;
+});
+
+/* ============================== clone stamp tool ============================== */
+const CLONE = { source:null, offsetX:0, offsetY:0, live:null };
+
+function cloneStampAt(px,py){
+  if(!S.img || !CLONE.source) return;
+  const wx = s2wX(px), wy = s2wY(py);
+  const sx = wx + CLONE.offsetX, sy = wy + CLONE.offsetY;
+  CLONE.live = {x:sx, y:sy};
+  const r = (+$("cloneSize").value)/2;
+  const feather = +$("cloneFeather").value;
+  const size = Math.max(1,Math.ceil(r*2));
+
+  // sample the source patch onto its own small canvas, then mask its alpha
+  // with the soft brush so the paste blends smoothly at the edges
+  const stamp=document.createElement("canvas"); stamp.width=size; stamp.height=size;
+  const sctx=stamp.getContext("2d");
+  sctx.drawImage(S.img, sx-r, sy-r, size, size, 0,0,size,size);
+  const mask=makeBrushMask(r,feather);
+  sctx.globalCompositeOperation="destination-in";
+  sctx.drawImage(mask,0,0);
+
+  const ictx=S.img.getContext("2d");
+  ictx.drawImage(stamp, wx-r, wy-r);
+}
+$("cloneSize").addEventListener("input",()=>{
+  $("cloneSizeVal").textContent = $("cloneSize").value+"px";
+  if(S.tool==="clone") updateCursor(cursorScreen?cursorScreen.x:null, cursorScreen?cursorScreen.y:null);
+});
+$("cloneFeather").addEventListener("input",()=>{
+  $("cloneFeatherVal").textContent = $("cloneFeather").value;
 });
 
 /* ============================== pointer interaction ============================== */
@@ -951,28 +1073,34 @@ function setTool(t){
   $("toolSlice").classList.toggle("on",t==="slice");
   $("toolTransform").classList.toggle("on",t==="transform");
   $("toolErase").classList.toggle("on",t==="erase");
+  $("toolClone").classList.toggle("on",t==="clone");
   $("toolHand").classList.toggle("on",t==="hand");
   $("transformPanel").style.display = t==="transform" ? "block":"none";
   $("eraseOpts").style.display = t==="erase" ? "flex":"none";
+  $("cloneOpts").style.display = t==="clone" ? "flex":"none";
   if(t==="transform" && S.img){ $("txW").value=S.W; $("txH").value=S.H; TX.active=true; }
   else { TX.active=false; TX.preview=null; }
   updateCursor();
+  draw();
 }
-function eraseCursorDiv(){
-  let el = document.getElementById("eraseCursor");
+function brushCursorDiv(id,color){
+  let el = document.getElementById(id);
   if(!el){
     el = document.createElement("div");
-    el.id="eraseCursor";
-    el.style.cssText="position:fixed; pointer-events:none; z-index:50; border:1.5px solid #ffb54c; border-radius:50%; background:rgba(255,181,76,.12); display:none;";
+    el.id=id;
+    el.style.cssText=`position:fixed; pointer-events:none; z-index:50; border:1.5px solid ${color}; border-radius:50%; background:${color}22; display:none;`;
     document.body.appendChild(el);
   }
   return el;
 }
+function eraseCursorDiv(){ return brushCursorDiv("eraseCursor","#ffb54c"); }
+function cloneCursorDiv(){ return brushCursorDiv("cloneCursor","#54e3a4"); }
 function updateCursor(px,py){
   let c = "default";
   const t = spaceHeld ? "hand" : S.tool;
-  const eraseEl = eraseCursorDiv();
+  const eraseEl = eraseCursorDiv(), cloneEl = cloneCursorDiv();
   if(t!=="erase") eraseEl.style.display="none";
+  if(t!=="clone") cloneEl.style.display="none";
   if(t==="slice") c="crosshair";
   else if(t==="erase"){
     c="none";
@@ -982,6 +1110,16 @@ function updateCursor(px,py){
       eraseEl.style.width=sizeCss+"px"; eraseEl.style.height=sizeCss+"px";
       eraseEl.style.left=(r.left+px-sizeCss/2)+"px"; eraseEl.style.top=(r.top+py-sizeCss/2)+"px";
       eraseEl.style.display="block";
+    }
+  }
+  else if(t==="clone"){
+    c="none";
+    if(px!=null && S.img){
+      const sizeCss=(+$("cloneSize").value)*S.zoom;
+      const r=cv.getBoundingClientRect();
+      cloneEl.style.width=sizeCss+"px"; cloneEl.style.height=sizeCss+"px";
+      cloneEl.style.left=(r.left+px-sizeCss/2)+"px"; cloneEl.style.top=(r.top+py-sizeCss/2)+"px";
+      cloneEl.style.display="block";
     }
   }
   else if(t==="hand") c = drag&&drag.type==="pan" ? "grabbing" : "grab";
@@ -1069,6 +1207,30 @@ cv.addEventListener("pointerdown", e=>{
     return;
   }
 
+  if(t==="clone"){
+    const wx=s2wX(px), wy=s2wY(py);
+    if(e.altKey){
+      CLONE.source={x:wx, y:wy};
+      CLONE.live=null;
+      draw();
+      return;
+    }
+    if(!CLONE.source){
+      flashStatus("Alt+Click to set a clone source first");
+      return;
+    }
+    pushUndo();
+    const clone=document.createElement("canvas");
+    clone.width=S.img.width; clone.height=S.img.height;
+    clone.getContext("2d").drawImage(S.img,0,0);
+    S.img=clone;
+    CLONE.offsetX = CLONE.source.x - wx;
+    CLONE.offsetY = CLONE.source.y - wy;
+    drag={type:"clone"};
+    cloneStampAt(px,py);
+    return;
+  }
+
   if(t==="slice"){
     const c = snapCandidates(null);
     const wx = clamp(snapVal(s2wX(px), c.xs), 0, S.W);
@@ -1107,6 +1269,13 @@ cv.addEventListener("pointermove", e=>{
   if(drag.type==="erase"){
     updateCursor(px,py);
     eraseAt(px,py);
+    draw();
+    return;
+  }
+
+  if(drag.type==="clone"){
+    updateCursor(px,py);
+    cloneStampAt(px,py);
     draw();
     return;
   }
@@ -1203,6 +1372,7 @@ cv.addEventListener("pointerup", e=>{
   else if(drag.type==="guide" && drag.idx===-1){
     // new guide from ruler drop handled elsewhere
   }
+  if(drag.type==="clone") CLONE.live=null;
   drag=null; updateCursor(e.offsetX,e.offsetY);
   refreshAll();
 });
@@ -1319,6 +1489,7 @@ function refreshAll(){
   $("btnPreview").disabled = !S.img || S.slices.length===0;
   $("btnSaveTemplate").disabled = !S.slices.length;
   $("btnSaveImage").disabled = !S.img;
+  $("btnRemoveBG").disabled = !S.img;
   draw();
 }
 
@@ -1848,6 +2019,131 @@ $("siOk").addEventListener("click",async()=>{
   await dlOrPicker(blob, safeName(S.name)+"."+ext,
     [{description:fmt.toUpperCase()+" image", accept:{["image/"+fmt]:["."+ext]}}]);
 });
+
+/* ── remove background: flood-fill from the edges, tolerance + feather ── */
+function colorDist(r1,g1,b1,r2,g2,b2){
+  const dr=r1-r2, dg=g1-g2, db=b1-b2;
+  return Math.sqrt(dr*dr+dg*dg+db*db);
+}
+function computeBackgroundAlpha(id, tolerancePct, featherPct){
+  const w=id.width, h=id.height, data=id.data;
+  const MAXD=441.7; // sqrt(255^2*3), max possible RGB distance
+  const T = (tolerancePct/100)*MAXD;
+  const F = (featherPct/100)*MAXD;
+
+  // reference background color = average of the border pixels
+  let rs=0,gs=0,bs=0,cnt=0;
+  for(let x=0;x<w;x++){
+    for(const y of [0,h-1]){ const i=(y*w+x)*4; rs+=data[i]; gs+=data[i+1]; bs+=data[i+2]; cnt++; }
+  }
+  for(let y=0;y<h;y++){
+    for(const x of [0,w-1]){ const i=(y*w+x)*4; rs+=data[i]; gs+=data[i+1]; bs+=data[i+2]; cnt++; }
+  }
+  const refR=rs/cnt, refG=gs/cnt, refB=bs/cnt;
+
+  const visited = new Uint8Array(w*h); // 0=unvisited, 1=background, 2=checked-not-background
+  const alpha = new Float32Array(w*h).fill(1);
+  const qx = new Int32Array(w*h), qy = new Int32Array(w*h);
+  let qs=0, qe=0;
+
+  function tryPush(x,y){
+    if(x<0||y<0||x>=w||y>=h) return;
+    const idx=y*w+x;
+    if(visited[idx]) return;
+    const i=idx*4;
+    const d=colorDist(data[i],data[i+1],data[i+2], refR,refG,refB);
+    if(d<=T){ visited[idx]=1; alpha[idx]=0; qx[qe]=x; qy[qe]=y; qe++; }
+    else visited[idx]=2;
+  }
+  for(let x=0;x<w;x++){ tryPush(x,0); tryPush(x,h-1); }
+  for(let y=0;y<h;y++){ tryPush(0,y); tryPush(w-1,y); }
+  while(qs<qe){
+    const x=qx[qs], y=qy[qs]; qs++;
+    tryPush(x+1,y); tryPush(x-1,y); tryPush(x,y+1); tryPush(x,y-1);
+  }
+
+  if(F>0){
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const idx=y*w+x;
+        if(visited[idx]!==2) continue;
+        let adj=false;
+        if(x>0&&visited[idx-1]===1) adj=true;
+        if(!adj&&x<w-1&&visited[idx+1]===1) adj=true;
+        if(!adj&&y>0&&visited[idx-w]===1) adj=true;
+        if(!adj&&y<h-1&&visited[idx+w]===1) adj=true;
+        if(!adj) continue;
+        const i=idx*4;
+        const d=colorDist(data[i],data[i+1],data[i+2], refR,refG,refB);
+        if(d<=T+F) alpha[idx]=clamp((d-T)/F,0,1);
+      }
+    }
+  }
+  return alpha;
+}
+
+/* live preview state: RB.previewImg overrides what draw() renders while the
+   dialog is open, without touching S.img until the user clicks Apply */
+const RB = { active:false, baseId:null, previewImg:null, timer:null };
+
+function currentDisplayImage(){ return (RB.active && RB.previewImg) ? RB.previewImg : S.img; }
+
+function rbComputePreview(){
+  if(!RB.active || !RB.baseId) return;
+  $("rbStatus").textContent="Updating preview…";
+  requestAnimationFrame(()=>{
+    const tolerance=+$("rbTolerance").value, feather=+$("rbFeather").value;
+    const w=RB.baseId.width, h=RB.baseId.height;
+    const out=new ImageData(new Uint8ClampedArray(RB.baseId.data), w, h);
+    const alpha=computeBackgroundAlpha(RB.baseId, tolerance, feather);
+    const data=out.data;
+    for(let p=0;p<alpha.length;p++){
+      if(alpha[p]<1) data[p*4+3]=Math.round(RB.baseId.data[p*4+3]*alpha[p]);
+    }
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    c.getContext("2d").putImageData(out,0,0);
+    RB.previewImg=c;
+    $("rbStatus").textContent="";
+    draw();
+  });
+}
+function rbScheduleUpdate(){
+  clearTimeout(RB.timer);
+  RB.timer=setTimeout(rbComputePreview, 120);
+}
+
+$("rbTolerance").addEventListener("input",()=>{ $("rbTolVal").textContent=$("rbTolerance").value; rbScheduleUpdate(); });
+$("rbFeather").addEventListener("input",()=>{ $("rbFeatherVal").textContent=$("rbFeather").value; rbScheduleUpdate(); });
+
+$("btnRemoveBG").addEventListener("click",()=>{
+  if(!S.img) return;
+  const c=document.createElement("canvas"); c.width=S.img.width; c.height=S.img.height;
+  const cctx=c.getContext("2d"); cctx.drawImage(S.img,0,0);
+  RB.baseId=cctx.getImageData(0,0,c.width,c.height);
+  RB.active=true; RB.previewImg=null;
+  $("rbStatus").textContent="";
+  $("dlgRemoveBG").showModal();
+  rbComputePreview();
+});
+
+function rbClosePreview(){
+  RB.active=false; RB.previewImg=null; RB.baseId=null;
+  clearTimeout(RB.timer);
+  draw();
+}
+$("rbCancel").addEventListener("click",()=>{ rbClosePreview(); $("dlgRemoveBG").close(); });
+$("dlgRemoveBG").addEventListener("close",()=>{ if(RB.active) rbClosePreview(); });
+
+$("rbOk").addEventListener("click",()=>{
+  if(!S.img || !RB.previewImg){ $("dlgRemoveBG").close(); return; }
+  pushUndo();
+  S.img = RB.previewImg;
+  RB.active=false; RB.previewImg=null; RB.baseId=null;
+  $("dlgRemoveBG").close();
+  flashStatus("Background removed");
+  refreshAll();
+});
+
 $("fileProj").addEventListener("change",e=>{
   const f=e.target.files[0]; e.target.value="";
   if(!f) return;
@@ -1890,6 +2186,7 @@ $("toolSelect").addEventListener("click",()=>setTool("select"));
 $("toolSlice").addEventListener("click",()=>setTool("slice"));
 $("toolTransform").addEventListener("click",()=>{ if(S.img) setTool("transform"); });
 $("toolErase").addEventListener("click",()=>{ if(S.img) setTool("erase"); });
+$("toolClone").addEventListener("click",()=>{ if(S.img) setTool("clone"); });
 $("toolHand").addEventListener("click",()=>setTool("hand"));
 // transform sidebar
 $("txW").addEventListener("change",()=>{
@@ -1925,6 +2222,7 @@ window.addEventListener("keydown",e=>{
   switch(e.key){
     case "t": case "T": if(S.img) setTool("transform"); break;
     case "e": case "E": if(S.img) setTool("erase"); break;
+    case "s": case "S": if(S.img && !mod) setTool("clone"); break;
     case "c": case "C": setTool("slice"); break;
     case "h": case "H": setTool("hand"); break;
     case "Delete": case "Backspace": delSelected(); break;
