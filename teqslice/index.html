@@ -224,6 +224,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
   <div class="sep"></div>
   <button class="btn" id="btnSave" title="Save project (Ctrl+S)">Save</button>
+  <button class="btn" id="btnSaveImage" disabled title="Save the working image as PNG/JPEG/etc (Ctrl+Shift+S)">Save Image…</button>
   <button class="btn" id="btnLoad" title="Open project">Load</button>
   <button class="btn" id="panelToggle">Panel</button>
 </header>
@@ -505,6 +506,39 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 </dialog>
 
 <!-- Resize image dialog -->
+<!-- Save Image As dialog -->
+<dialog id="dlgSaveImage">
+  <h3>Save image as</h3>
+  <div class="row grow"><label style="min-width:44px">Format</label>
+    <select id="siFormat">
+      <option value="png">PNG</option>
+      <option value="jpeg">JPEG</option>
+      <option value="webp">WebP</option>
+      <option value="bmp">BMP</option>
+      <option value="tga">TGA</option>
+      <option value="tiff">TIFF</option>
+      <option value="ico">ICO</option>
+    </select>
+    <select id="siScale" title="Scale">
+      <option value="0.5">0.5×</option>
+      <option value="1" selected>1×</option>
+      <option value="2">2×</option>
+      <option value="3">3×</option>
+      <option value="4">4×</option>
+    </select>
+  </div>
+  <div class="row grow" id="siQualityRow" style="display:none">
+    <label style="min-width:44px">Quality</label>
+    <input type="range" id="siQuality" min="10" max="100" value="90">
+    <span class="mono" id="siQualityVal" style="min-width:28px; color:var(--dim)">90</span>
+  </div>
+  <div class="dlgNote">Saves the whole working image — including any erasing, resizing, or canvas changes — as a single file. Slices aren't included; use Export for those.</div>
+  <div class="actions">
+    <button class="btn" id="siCancel">Cancel</button>
+    <button class="btn primary" id="siOk">Save</button>
+  </div>
+</dialog>
+
 <dialog id="dlgResize">
   <h3>Resize image</h3>
   <div class="grid2">
@@ -1279,6 +1313,7 @@ function refreshAll(){
   syncProps(); refreshList();
   $("btnPreview").disabled = !S.img || S.slices.length===0;
   $("btnSaveTemplate").disabled = !S.slices.length;
+  $("btnSaveImage").disabled = !S.img;
   draw();
 }
 
@@ -1786,6 +1821,28 @@ function saveProject(){
     [{description:"TeqSlice project", accept:{"application/json":[".json"]}}]);
 }
 $("btnLoad").addEventListener("click",()=>$("fileProj").click());
+
+/* ── save image as (whole working image, not slices) ── */
+$("siFormat").addEventListener("change",()=>{
+  $("siQualityRow").style.display = ["jpeg","webp"].includes($("siFormat").value) ? "flex":"none";
+});
+$("siQuality").addEventListener("input",()=>$("siQualityVal").textContent=$("siQuality").value);
+
+$("btnSaveImage").addEventListener("click",()=>{
+  if(!S.img) return;
+  $("dlgSaveImage").showModal();
+});
+$("siCancel").addEventListener("click",()=>$("dlgSaveImage").close());
+$("siOk").addEventListener("click",async()=>{
+  if(!S.img) return;
+  const fmt=$("siFormat").value, scale=+$("siScale").value, q=(+$("siQuality").value)/100;
+  $("dlgSaveImage").close();
+  const fullSlice={x:0,y:0,w:S.W,h:S.H};
+  const blob=await renderSlice(fullSlice,scale,fmt,q);
+  const ext=extFor(fmt);
+  await dlOrPicker(blob, safeName(S.name)+"."+ext,
+    [{description:fmt.toUpperCase()+" image", accept:{["image/"+fmt]:["."+ext]}}]);
+});
 $("fileProj").addEventListener("change",e=>{
   const f=e.target.files[0]; e.target.value="";
   if(!f) return;
@@ -1852,7 +1909,12 @@ window.addEventListener("keydown",e=>{
   if(mod && e.key.toLowerCase()==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
   if(mod && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); return; }
   if(mod && e.key.toLowerCase()==="d"){ e.preventDefault(); $("btnDup").click(); return; }
-  if(mod && e.key.toLowerCase()==="s"){ e.preventDefault(); saveProject(); return; }
+  if(mod && e.key.toLowerCase()==="s"){
+    e.preventDefault();
+    if(e.shiftKey){ if(S.img) $("dlgSaveImage").showModal(); }
+    else saveProject();
+    return;
+  }
   if(mod && e.key.toLowerCase()==="o"){ e.preventDefault(); $("fileImg").click(); return; }
   if(mod && e.key.toLowerCase()==="e"){ e.preventDefault(); exportDefault(); return; }
   switch(e.key){
