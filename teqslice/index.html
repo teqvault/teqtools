@@ -158,9 +158,10 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <div class="logo"><img src="icon-192.png" alt=""><div><b>TeqSlice</b><br><span>image slicer</span></div></div>
 
   <div class="tgroup" role="toolbar" aria-label="Tools">
-    <button class="tool" id="toolSelect" title="Slice Select (V)">⇱</button>
-    <button class="tool" id="toolSlice"  title="Slice (C)">◫</button>
-    <button class="tool" id="toolHand"   title="Hand (H / hold Space)">✋</button>
+    <button class="tool" id="toolSelect"    title="Slice Select (V)">⇱</button>
+    <button class="tool" id="toolSlice"     title="Slice (C)">◫</button>
+    <button class="tool" id="toolTransform" title="Free Transform — resize image (T)">⤢</button>
+    <button class="tool" id="toolHand"      title="Hand (H / hold Space)">✋</button>
   </div>
 
   <div class="sep"></div>
@@ -199,8 +200,20 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   </div>
 
   <aside id="panel">
-    <section>
-      <h2>Slice properties</h2>
+    <section id="transformPanel" style="display:none">
+      <h2>Free transform</h2>
+      <div class="grid2">
+        <div class="row"><label>W</label><input type="number" id="txW" step="1" min="1"></div>
+        <div class="row"><label>H</label><input type="number" id="txH" step="1" min="1"></div>
+      </div>
+      <label class="check" style="margin:6px 0"><input type="checkbox" id="txLock" checked> Lock aspect ratio</label>
+      <label class="check" style="margin-bottom:6px"><input type="checkbox" id="txScaleSlices" checked> Scale slices with image</label>
+      <div style="color:var(--faint); font-size:11px; margin-top:2px">Drag handles · corner = proportional · edge = free · Alt = leave slices</div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="txApply">Apply<kbd>↵</kbd></button>
+        <button class="btn" id="txCancel">Cancel<kbd>Esc</kbd></button>
+      </div>
+    </section>
       <div id="propNone" class="empty">No slice selected. Draw one with the Slice tool (C), or click one with Slice Select (V).</div>
       <div id="propBox" style="display:none">
         <div class="row grow"><label>Name</label><input type="text" id="pName"></div>
@@ -581,6 +594,9 @@ function draw(){
     }
   });
 
+  // free transform overlay (drawn on top of everything)
+  if(TX.active) drawTransformOverlay();
+
   // live drag rect (new slice)
   if(drag && drag.type==="new"){
     const a = drag.rect;
@@ -676,6 +692,71 @@ function snapVal(v, cands){
   return best;
 }
 
+/* ============================== free transform state ============================== */
+const TX = { active:false, preview:null /* {w,h} while dragging */ };
+
+function txHandlePoints(w,h){
+  // 8 handles around the image bounding box in screen coords
+  const x1=w2sX(0), y1=w2sY(0), x2=w2sX(w), y2=w2sY(h);
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  return [[x1,y1],[mx,y1],[x2,y1],[x2,my],[x2,y2],[mx,y2],[x1,y2],[x1,my]];
+}
+function hitTxHandle(px,py){
+  if(!TX.active||!S.img) return -1;
+  const w=TX.preview?TX.preview.w:S.W, h=TX.preview?TX.preview.h:S.H;
+  const pts=txHandlePoints(w,h);
+  for(let i=0;i<8;i++) if(Math.abs(pts[i][0]-px)<=7&&Math.abs(pts[i][1]-py)<=7) return i;
+  return -1;
+}
+function insideImage(px,py){
+  if(!S.img) return false;
+  return px>=w2sX(0)&&px<=w2sX(S.W)&&py>=w2sY(0)&&py<=w2sY(S.H);
+}
+function drawTransformOverlay(){
+  if(!TX.active||!S.img) return;
+  const w=TX.preview?TX.preview.w:S.W, h=TX.preview?TX.preview.h:S.H;
+  const pts=txHandlePoints(w,h);
+  const x1=pts[0][0], y1=pts[0][1], x2=pts[2][0], y2=pts[4][1];
+  // border
+  ctx.save();
+  ctx.strokeStyle="#ffb54c"; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+  ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+  ctx.setLineDash([]);
+  // handles
+  ctx.fillStyle="#ffb54c"; ctx.strokeStyle="#16171b"; ctx.lineWidth=1;
+  for(const [hx,hy] of pts){
+    ctx.fillRect(hx-5,hy-5,10,10); ctx.strokeRect(hx-5.5,hy-5.5,11,11);
+  }
+  // live W×H label
+  if(TX.preview){
+    ctx.font="bold 12px ui-monospace,monospace"; ctx.fillStyle="#ffb54c";
+    ctx.fillText(`${TX.preview.w} × ${TX.preview.h}`, x1+6, y1-8);
+  }
+  ctx.restore();
+}
+
+function applyTransform(nw, nh, altKey){
+  nw=Math.max(1,Math.round(nw)); nh=Math.max(1,Math.round(nh));
+  if(nw===S.W&&nh===S.H){ TX.preview=null; draw(); return; }
+  pushUndo();
+  const smooth=true, fx=nw/S.W, fy=nh/S.H;
+  const c=document.createElement("canvas"); c.width=nw; c.height=nh;
+  const x=c.getContext("2d"); x.imageSmoothingEnabled=smooth; x.imageSmoothingQuality="high";
+  x.drawImage(S.img,0,0,nw,nh);
+  if(!altKey&&$("txScaleSlices").checked){
+    for(const sl of S.slices){
+      sl.x=Math.round(sl.x*fx); sl.y=Math.round(sl.y*fy);
+      sl.w=Math.max(1,Math.round(sl.w*fx)); sl.h=Math.max(1,Math.round(sl.h*fy));
+    }
+    S.guides.v=S.guides.v.map(g=>Math.round(g*fx));
+    S.guides.h=S.guides.h.map(g=>Math.round(g*fy));
+  }
+  setImage(c); TX.preview=null; clampSlicesGuides();
+  $("txW").value=S.W; $("txH").value=S.H;
+  flashStatus(`Image resized to ${nw}×${nh}`);
+  refreshAll();
+}
+
 /* ============================== pointer interaction ============================== */
 let drag = null;      // active drag descriptor
 let spaceHeld = false;
@@ -684,7 +765,11 @@ function setTool(t){
   S.tool=t;
   $("toolSelect").classList.toggle("on",t==="select");
   $("toolSlice").classList.toggle("on",t==="slice");
+  $("toolTransform").classList.toggle("on",t==="transform");
   $("toolHand").classList.toggle("on",t==="hand");
+  $("transformPanel").style.display = t==="transform" ? "block":"none";
+  if(t==="transform" && S.img){ $("txW").value=S.W; $("txH").value=S.H; TX.active=true; }
+  else { TX.active=false; TX.preview=null; }
   updateCursor();
 }
 function updateCursor(px,py){
@@ -692,6 +777,11 @@ function updateCursor(px,py){
   const t = spaceHeld ? "hand" : S.tool;
   if(t==="slice") c="crosshair";
   else if(t==="hand") c = drag&&drag.type==="pan" ? "grabbing" : "grab";
+  else if(t==="transform" && px!=null){
+    const hi=hitTxHandle(px,py);
+    if(hi>=0) c=HANDLE_CURSORS[hi];
+    else if(insideImage(px,py)) c="move";
+  }
   else if(t==="select" && px!=null){
     const sl = selected();
     if(sl){
@@ -735,7 +825,17 @@ cv.addEventListener("pointerdown", e=>{
   const px=e.offsetX, py=e.offsetY;
   const t = (spaceHeld || e.button===1) ? "hand" : S.tool;
 
-  if(t==="hand"){ drag={type:"pan", sx:px, sy:py, ox:S.ox, oy:S.oy}; updateCursor(); return; }
+  if(t==="transform" && e.button===0){
+    const hi=hitTxHandle(px,py);
+    if(hi>=0){
+      const curW=TX.preview?TX.preview.w:S.W, curH=TX.preview?TX.preview.h:S.H;
+      drag={type:"tx", handle:hi, startPx:px, startPy:py,
+            origW:curW, origH:curH, altKey:e.altKey,
+            aspect:curW/curH};
+      return;
+    }
+    return;
+  }
   if(e.button!==0) return;
 
   if(t==="slice"){
@@ -817,6 +917,27 @@ cv.addEventListener("pointermove", e=>{
     sl.w=Math.max(1,Math.round(Math.abs(x2-x1))); sl.h=Math.max(1,Math.round(Math.abs(y2-y1)));
     syncProps(); statusRect(sl);
   }
+  else if(drag.type==="tx"){
+    const h=drag.handle;
+    const dx=(px-drag.startPx)/S.zoom, dy=(py-drag.startPy)/S.zoom;
+    let nw=drag.origW, nh=drag.origH;
+    const corner=[0,2,4,6].includes(h);
+    // which edges move
+    if([2,3,4].includes(h)) nw=Math.max(1,drag.origW+dx);
+    if([0,7,6].includes(h)) nw=Math.max(1,drag.origW-dx);
+    if([4,5,6].includes(h)) nh=Math.max(1,drag.origH+dy);
+    if([0,1,2].includes(h)) nh=Math.max(1,drag.origH-dy);
+    // corner = proportional unless Shift held to go free
+    if(corner && !e.shiftKey){
+      const s=Math.max(nw/drag.origW, nh/drag.origH);
+      nw=Math.max(1,Math.round(drag.origW*s));
+      nh=Math.max(1,Math.round(drag.origH*s));
+    }
+    TX.preview={w:Math.round(nw), h:Math.round(nh)};
+    $("txW").value=TX.preview.w; $("txH").value=TX.preview.h;
+    drag.altKey=e.altKey;
+    statusRect({x:0,y:0,w:TX.preview.w,h:TX.preview.h});
+  }
   else if(drag.type==="guide"){
     drag.pos = drag.axis==="v" ? clamp(Math.round(s2wX(px)),0,S.W)
                                : clamp(Math.round(s2wY(py)),0,S.H);
@@ -830,7 +951,10 @@ cv.addEventListener("pointermove", e=>{
 
 cv.addEventListener("pointerup", e=>{
   if(!drag) return;
-  if(drag.type==="new"){
+  if(drag.type==="tx"){
+    if(TX.preview) applyTransform(TX.preview.w, TX.preview.h, drag.altKey);
+  }
+  else if(drag.type==="new"){
     const r = drag.rect;
     if(r.w>=2 && r.h>=2){
       pushUndo();
@@ -1491,9 +1615,19 @@ $("btnZoomIn").addEventListener("click",()=>{ const r=viewport.getBoundingClient
 $("btnZoomOut").addEventListener("click",()=>{ const r=viewport.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,S.zoom/1.25); });
 $("toolSelect").addEventListener("click",()=>setTool("select"));
 $("toolSlice").addEventListener("click",()=>setTool("slice"));
+$("toolTransform").addEventListener("click",()=>{ if(S.img) setTool("transform"); });
 $("toolHand").addEventListener("click",()=>setTool("hand"));
-$("btnUndo").addEventListener("click",undo);
-$("btnRedo").addEventListener("click",redo);
+// transform sidebar
+$("txW").addEventListener("change",()=>{
+  if($("txLock").checked){ const w=Math.max(1,+$("txW").value|0); $("txH").value=Math.max(1,Math.round(w*S.H/S.W)); }
+  TX.preview={w:Math.max(1,+$("txW").value|0), h:Math.max(1,+$("txH").value|0)}; draw();
+});
+$("txH").addEventListener("change",()=>{
+  if($("txLock").checked){ const h=Math.max(1,+$("txH").value|0); $("txW").value=Math.max(1,Math.round(h*S.W/S.H)); }
+  TX.preview={w:Math.max(1,+$("txW").value|0), h:Math.max(1,+$("txH").value|0)}; draw();
+});
+$("txApply").addEventListener("click",()=>applyTransform(+$("txW").value||S.W, +$("txH").value||S.H, false));
+$("txCancel").addEventListener("click",()=>{ TX.preview=null; $("txW").value=S.W; $("txH").value=S.H; draw(); });
 $("panelToggle").addEventListener("click",()=>$("panel").classList.toggle("open"));
 
 /* ============================== keyboard ============================== */
@@ -1510,7 +1644,7 @@ window.addEventListener("keydown",e=>{
   if(mod && e.key.toLowerCase()==="o"){ e.preventDefault(); $("fileImg").click(); return; }
   if(mod && e.key.toLowerCase()==="e"){ e.preventDefault(); exportDefault(); return; }
   switch(e.key){
-    case "v": case "V": setTool("select"); break;
+    case "t": case "T": if(S.img) setTool("transform"); break;
     case "c": case "C": setTool("slice"); break;
     case "h": case "H": setTool("hand"); break;
     case "Delete": case "Backspace": delSelected(); break;
@@ -1518,7 +1652,9 @@ window.addEventListener("keydown",e=>{
     case "1": $("btnZoom100").click(); break;
     case "+": case "=": $("btnZoomIn").click(); break;
     case "-": $("btnZoomOut").click(); break;
-    case "Escape": select(null); break;
+    case "Enter":
+      if(S.tool==="transform"&&TX.preview){ e.preventDefault(); applyTransform(TX.preview.w,TX.preview.h,false); } break;
+    case "Escape": if(S.tool==="transform"){ TX.preview=null; $("txW").value=S.W; $("txH").value=S.H; draw(); } else select(null); break;
     case "ArrowLeft": case "ArrowRight": case "ArrowUp": case "ArrowDown":{
       const sl=selected(); if(!sl) break;
       e.preventDefault(); pushUndo();
