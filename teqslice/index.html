@@ -30,6 +30,11 @@ header{
   display:flex; align-items:center; gap:6px; padding:6px 10px;
   background:var(--panel); border-bottom:1px solid var(--edge); flex-wrap:wrap;
 }
+/* Electron's frameless titlebar overlay (min/max/close) sits on top of the
+   page in the top-right corner. Reserve space so it never covers buttons,
+   and let the empty header background double as a drag handle. */
+html.electron-app header{ padding-right:150px; -webkit-app-region:drag; }
+html.electron-app header *{ -webkit-app-region:no-drag; }
 .logo{display:flex; align-items:center; gap:8px; margin-right:10px}
 .logo b{font-size:14px; letter-spacing:.4px}
 .logo span{color:var(--faint); font-size:11px}
