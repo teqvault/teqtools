@@ -185,7 +185,38 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 .anchGrid{display:grid; grid-template-columns:repeat(3,28px); gap:4px; margin:4px 0}
 .anch{width:28px; height:28px; border:1px solid var(--edge); border-radius:6px; background:var(--bg); padding:0; justify-content:center}
 .anch.on{background:var(--accent); border-color:transparent}
-.dlgNote{color:var(--faint); font-size:11px; margin-top:6px}
+.dlgNote{color:var(--faint); font-size:11px; margin-top:6px; max-width:400px}
+/* ---------- remove background: wand / lasso selection ---------- */
+/* This one dialog gets a large, viewport-relative size instead of the
+   generic fit-content dialog sizing — a fixed small canvas isn't usable for
+   detailed sprite sheets, so it takes up most of the screen instead. */
+#dlgRemoveBG{
+  width:min(94vw, 1240px); max-width:94vw;
+  height:min(90vh, 840px); max-height:90vh;
+}
+#dlgRemoveBG[open]{
+  display:flex; flex-direction:column;
+}
+#rbBody{ display:flex; gap:14px; flex:1; min-height:0; }
+#rbMain{ display:flex; flex-direction:column; flex:1; min-width:0; }
+#rbSide{ width:260px; flex-shrink:0; overflow-y:auto; padding-left:2px }
+#rbCanvasWrap{ flex:1; min-height:0; margin-top:8px; position:relative }
+#rbPreviewCanvas{
+  border:1px solid var(--edge); border-radius:8px; cursor:crosshair;
+  display:block; background:#101116; touch-action:none;
+  width:100%; height:100%;
+}
+#rbPreviewCanvas.rb-tool-wand{ cursor:pointer }
+#rbPreviewCanvas.rb-tool-lasso{ cursor:crosshair }
+#rbToolbar{margin-bottom:0}
+#rbToolbar .btn{font-size:11px; padding:5px 9px}
+#rbToolbar .tool{font-size:11px; padding:5px 10px}
+@media (max-width:760px){
+  #dlgRemoveBG{ width:96vw; height:94vh; }
+  #rbBody{ flex-direction:column; }
+  #rbSide{ width:auto; }
+}
+
 
 @media (max-width:760px){
   main{grid-template-columns:1fr}
@@ -212,7 +243,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   </div>
   <div id="eraseOpts" style="display:none; align-items:center; gap:6px; margin-right:4px">
     <label style="color:var(--dim); font-size:11px">Size</label>
-    <input type="range" id="eraseSize" min="2" max="200" value="24" style="width:90px">
+    <input type="range" id="eraseSize" min="2" max="600" value="24" style="width:90px">
     <span id="eraseSizeVal" class="mono" style="color:var(--dim); font-size:11px; min-width:28px">24px</span>
     <label style="color:var(--dim); font-size:11px; margin-left:6px">Feather</label>
     <input type="range" id="eraseFeather" min="0" max="100" value="0" style="width:70px">
@@ -220,7 +251,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   </div>
   <div id="cloneOpts" style="display:none; align-items:center; gap:6px; margin-right:4px">
     <label style="color:var(--dim); font-size:11px">Size</label>
-    <input type="range" id="cloneSize" min="2" max="200" value="40" style="width:90px">
+    <input type="range" id="cloneSize" min="2" max="600" value="40" style="width:90px">
     <span id="cloneSizeVal" class="mono" style="color:var(--dim); font-size:11px; min-width:28px">40px</span>
     <label style="color:var(--dim); font-size:11px; margin-left:6px">Feather</label>
     <input type="range" id="cloneFeather" min="0" max="100" value="0" style="width:70px">
@@ -530,23 +561,44 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 <!-- Remove Background dialog -->
 <dialog id="dlgRemoveBG">
   <h3>Remove background</h3>
-  <div class="row"><label style="min-width:64px">Tolerance</label>
-    <input type="range" id="rbTolerance" min="1" max="100" value="30">
-    <span class="mono" id="rbTolVal" style="min-width:28px; color:var(--dim)">30</span>
-  </div>
-  <div class="row"><label style="min-width:64px">Feather</label>
-    <input type="range" id="rbFeather" min="0" max="60" value="12">
-    <span class="mono" id="rbFeatherVal" style="min-width:28px; color:var(--dim)">12</span>
-  </div>
-  <div id="rbStatus" style="color:var(--faint); font-size:11px; min-height:14px; margin:2px 0 4px"></div>
-  <div class="dlgNote">
-    Detects the background color touching the image's outer edge and removes
-    only that connected region, leaving the subject alone. Works well on flat
-    or near-flat backgrounds (sprite icons, sheets on a solid color). Drag the
-    sliders to preview live on the canvas behind this dialog — nothing is
-    changed until you click Remove background. Complex photo backgrounds
-    won't separate cleanly — that needs a real ML model, which this offline
-    tool doesn't include.
+  <div id="rbBody">
+    <div id="rbMain">
+      <div class="row" id="rbToolbar" style="gap:6px">
+        <div class="tgroup">
+          <button class="tool on" id="btnRbWand" title="Magic wand — click a region to select it">Wand</button>
+          <button class="tool" id="btnRbLasso" title="Lasso — drag to draw a shape">Lasso</button>
+        </div>
+        <div class="sep"></div>
+        <button class="btn" id="btnRbAuto" title="Auto-detect background from image edges">Auto edges</button>
+        <button class="btn" id="btnRbInvert" title="Invert selection">Invert</button>
+        <button class="btn" id="btnRbClear" title="Clear selection">Clear</button>
+      </div>
+      <div id="rbCanvasWrap"><canvas id="rbPreviewCanvas"></canvas></div>
+      <div style="font-size:10px; color:var(--faint); margin-top:6px">
+        Click (Wand) or drag a shape (Lasso) to select. Shift adds to the
+        selection, Alt subtracts. Scroll to zoom, right-click-drag to pan,
+        double-click to reset. Tinted area is what gets removed.
+      </div>
+    </div>
+    <div id="rbSide">
+      <div class="row"><label style="min-width:64px">Tolerance</label>
+        <input type="range" id="rbTolerance" min="1" max="100" value="30">
+        <span class="mono" id="rbTolVal" style="min-width:28px; color:var(--dim)">30</span>
+      </div>
+      <div class="row"><label style="min-width:64px">Feather</label>
+        <input type="range" id="rbFeather" min="0" max="30" value="3">
+        <span class="mono" id="rbFeatherVal" style="min-width:28px; color:var(--dim)">3</span>
+      </div>
+      <div id="rbStatus" style="color:var(--faint); font-size:11px; min-height:14px; margin:2px 0 4px"></div>
+      <div class="dlgNote">
+        Wand selects a connected region by color similarity (Tolerance
+        controls how loose the match is). Lasso selects any shape you draw,
+        regardless of color. Combine freely — Auto edges reproduces the old
+        one-click flat-background detection as a starting selection, Invert
+        flips kept vs. removed, and Feather softens the cutout edge. Nothing
+        changes until you click Remove background.
+      </div>
+    </div>
   </div>
   <div class="actions">
     <button class="btn" id="rbCancel">Cancel</button>
@@ -641,6 +693,7 @@ const S = {
 };
 let nextId = 1;
 let undoStack = [], redoStack = [];
+let dirty = false; // true whenever there are unsaved changes since the last save/load
 
 const cv = $("cv"), ctx = cv.getContext("2d");
 const rX = $("rulerX"), rXc = rX.getContext("2d");
@@ -667,6 +720,7 @@ function snapState(){
   return {json:JSON.stringify({slices:S.slices, guides:S.guides}), img:S.img, W:S.W, H:S.H};
 }
 function pushUndo(){
+  dirty = true;
   undoStack.push(snapState());
   if(undoStack.length>100) undoStack.shift();
   redoStack.length = 0;
@@ -684,11 +738,13 @@ function restore(st){
 }
 function undo(){
   if(!undoStack.length) return;
+  dirty = true;
   redoStack.push(snapState());
   restore(undoStack.pop()); updateUndoButtons();
 }
 function redo(){
   if(!redoStack.length) return;
+  dirty = true;
   undoStack.push(snapState());
   restore(redoStack.pop()); updateUndoButtons();
 }
@@ -998,10 +1054,18 @@ function applyTransform(nw, nh, altKey){
 /* ============================== erase tool ============================== */
 function makeBrushMask(r, featherPct){
   // radial-gradient alpha stamp: feather=0 -> hard disk (old behavior),
-  // feather=100 -> soft falloff across the whole brush
+  // feather=100 -> soft falloff across the whole brush.
+  // NOTE: at feather=0, inner===outer radius would make a zero-width
+  // gradient, which paints as fully transparent everywhere in Chromium —
+  // so that case is special-cased to a plain solid fill instead.
   const size=Math.max(1,Math.ceil(r*2));
   const c=document.createElement("canvas"); c.width=size; c.height=size;
   const x=c.getContext("2d");
+  if(featherPct<=0){
+    x.fillStyle="rgba(255,255,255,1)";
+    x.beginPath(); x.arc(r,r,r,0,Math.PI*2); x.fill();
+    return c;
+  }
   const inner=Math.max(0, r*(1-featherPct/100));
   const grad=x.createRadialGradient(r,r,inner, r,r,r);
   grad.addColorStop(0,"rgba(255,255,255,1)");
@@ -1370,7 +1434,14 @@ cv.addEventListener("pointerup", e=>{
     }
   }
   else if(drag.type==="guide" && drag.idx===-1){
-    // new guide from ruler drop handled elsewhere
+    // A guide being dragged out from a ruler is owned end-to-end by
+    // rulerDrag's own window-level pointerup handler, which reads drag.pos
+    // to commit it. This canvas-level handler also fires (the canvas is the
+    // actual event target when the release happens over the image), and if
+    // it ran drag=null first, the ruler's handler would find drag already
+    // null and silently fail to commit the guide. Bail out here and leave
+    // drag alone so the ruler's handler can finish the job.
+    return;
   }
   if(drag.type==="clone") CLONE.live=null;
   drag=null; updateCursor(e.offsetX,e.offsetY);
@@ -1538,7 +1609,7 @@ function loadImageFile(file){
     S.img=c; S.W=c.width; S.H=c.height;
     S.name=(file.name||"image").replace(/\.[^.]+$/,"");
     S.slices=[]; S.guides={v:[],h:[]}; S.selId=null;
-    undoStack=[]; redoStack=[]; updateUndoButtons();
+    undoStack=[]; redoStack=[]; updateUndoButtons(); dirty=false;
     $("drop").classList.add("hide");
     $("sImg").textContent=`${S.W}×${S.H}`;
     fit(); refreshAll();
@@ -1986,15 +2057,17 @@ if(!FOLDER_OK){
 
 /* ============================== project save/load ============================== */
 $("btnSave").addEventListener("click",saveProject);
-function saveProject(){
-  if(!S.img) return;
+async function saveProject(){
+  if(!S.img) return false;
   const c=document.createElement("canvas"); c.width=S.W; c.height=S.H;
   c.getContext("2d").drawImage(S.img,0,0);
   const data={app:"TeqSlice", version:1, name:S.name,
     image:c.toDataURL("image/png"), slices:S.slices, guides:S.guides};
-  dlOrPicker(new Blob([JSON.stringify(data)],{type:"application/json"}),
+  const ok = await dlOrPicker(new Blob([JSON.stringify(data)],{type:"application/json"}),
     safeName(S.name)+".teqslice.json",
     [{description:"TeqSlice project", accept:{"application/json":[".json"]}}]);
+  if(ok) dirty=false;
+  return ok;
 }
 $("btnLoad").addEventListener("click",()=>$("fileProj").click());
 
@@ -2020,18 +2093,15 @@ $("siOk").addEventListener("click",async()=>{
     [{description:fmt.toUpperCase()+" image", accept:{["image/"+fmt]:["."+ext]}}]);
 });
 
-/* ── remove background: flood-fill from the edges, tolerance + feather ── */
+/* ── remove background: PS-style selection — magic wand, lasso, and the
+   original edge-connected auto-detect, all producing a boolean mask that
+   can be combined (new/add/subtract) before a soft-edge feather is applied ── */
 function colorDist(r1,g1,b1,r2,g2,b2){
   const dr=r1-r2, dg=g1-g2, db=b1-b2;
   return Math.sqrt(dr*dr+dg*dg+db*db);
 }
-function computeBackgroundAlpha(id, tolerancePct, featherPct){
+function computeBorderAverage(id){
   const w=id.width, h=id.height, data=id.data;
-  const MAXD=441.7; // sqrt(255^2*3), max possible RGB distance
-  const T = (tolerancePct/100)*MAXD;
-  const F = (featherPct/100)*MAXD;
-
-  // reference background color = average of the border pixels
   let rs=0,gs=0,bs=0,cnt=0;
   for(let x=0;x<w;x++){
     for(const y of [0,h-1]){ const i=(y*w+x)*4; rs+=data[i]; gs+=data[i+1]; bs+=data[i+2]; cnt++; }
@@ -2039,80 +2109,329 @@ function computeBackgroundAlpha(id, tolerancePct, featherPct){
   for(let y=0;y<h;y++){
     for(const x of [0,w-1]){ const i=(y*w+x)*4; rs+=data[i]; gs+=data[i+1]; bs+=data[i+2]; cnt++; }
   }
-  const refR=rs/cnt, refG=gs/cnt, refB=bs/cnt;
-
-  const visited = new Uint8Array(w*h); // 0=unvisited, 1=background, 2=checked-not-background
-  const alpha = new Float32Array(w*h).fill(1);
-  const qx = new Int32Array(w*h), qy = new Int32Array(w*h);
+  return {r:rs/cnt, g:gs/cnt, b:bs/cnt};
+}
+/* magic wand: contiguous flood fill from a seed pixel, matched against the
+   seed's own color within tolerance — doesn't require touching the edge */
+function wandMask(id, x0, y0, tolerancePct){
+  const w=id.width, h=id.height, data=id.data;
+  const MAXD=441.7, T=(tolerancePct/100)*MAXD;
+  const mask=new Uint8Array(w*h);
+  if(x0<0||y0<0||x0>=w||y0>=h) return mask;
+  const si=(y0*w+x0)*4, sr=data[si], sg=data[si+1], sb=data[si+2];
+  const visited=new Uint8Array(w*h);
+  const qx=new Int32Array(w*h), qy=new Int32Array(w*h);
   let qs=0, qe=0;
-
   function tryPush(x,y){
     if(x<0||y<0||x>=w||y>=h) return;
     const idx=y*w+x;
     if(visited[idx]) return;
+    visited[idx]=1;
     const i=idx*4;
-    const d=colorDist(data[i],data[i+1],data[i+2], refR,refG,refB);
-    if(d<=T){ visited[idx]=1; alpha[idx]=0; qx[qe]=x; qy[qe]=y; qe++; }
-    else visited[idx]=2;
+    if(colorDist(data[i],data[i+1],data[i+2],sr,sg,sb)<=T){ mask[idx]=1; qx[qe]=x; qy[qe]=y; qe++; }
   }
-  for(let x=0;x<w;x++){ tryPush(x,0); tryPush(x,h-1); }
-  for(let y=0;y<h;y++){ tryPush(0,y); tryPush(w-1,y); }
+  tryPush(x0,y0);
   while(qs<qe){
     const x=qx[qs], y=qy[qs]; qs++;
     tryPush(x+1,y); tryPush(x-1,y); tryPush(x,y+1); tryPush(x,y-1);
   }
-
-  if(F>0){
-    for(let y=0;y<h;y++){
-      for(let x=0;x<w;x++){
-        const idx=y*w+x;
-        if(visited[idx]!==2) continue;
-        let adj=false;
-        if(x>0&&visited[idx-1]===1) adj=true;
-        if(!adj&&x<w-1&&visited[idx+1]===1) adj=true;
-        if(!adj&&y>0&&visited[idx-w]===1) adj=true;
-        if(!adj&&y<h-1&&visited[idx+w]===1) adj=true;
-        if(!adj) continue;
-        const i=idx*4;
-        const d=colorDist(data[i],data[i+1],data[i+2], refR,refG,refB);
-        if(d<=T+F) alpha[idx]=clamp((d-T)/F,0,1);
-      }
+  return mask;
+}
+/* original auto-detect: flood fill from the image border against the
+   border-average color, with a color-chain allowance so gentle gradients
+   don't cut off at a hard edge */
+function autoEdgeMask(id, tolerancePct){
+  const w=id.width, h=id.height, data=id.data;
+  const MAXD=441.7, T=(tolerancePct/100)*MAXD, TCHAIN=T*0.6, TCAP=T*1.8;
+  const ref=computeBorderAverage(id);
+  const visited=new Uint8Array(w*h);
+  const mask=new Uint8Array(w*h);
+  const qx=new Int32Array(w*h), qy=new Int32Array(w*h);
+  let qs=0, qe=0;
+  function classify(x,y,parentIdx){
+    if(x<0||y<0||x>=w||y>=h) return;
+    const idx=y*w+x;
+    if(visited[idx]) return;
+    const i=idx*4, r=data[i], g=data[i+1], b=data[i+2];
+    const dMin=colorDist(r,g,b,ref.r,ref.g,ref.b);
+    let isBg=dMin<=T;
+    if(!isBg && parentIdx>=0 && dMin<=TCAP){
+      const pi=parentIdx*4;
+      if(colorDist(r,g,b,data[pi],data[pi+1],data[pi+2])<=TCHAIN) isBg=true;
+    }
+    visited[idx]=1;
+    if(isBg){ mask[idx]=1; qx[qe]=x; qy[qe]=y; qe++; }
+  }
+  for(let x=0;x<w;x++){ classify(x,0,-1); classify(x,h-1,-1); }
+  for(let y=0;y<h;y++){ classify(0,y,-1); classify(w-1,y,-1); }
+  while(qs<qe){
+    const x=qx[qs], y=qy[qs]; const parentIdx=y*w+x; qs++;
+    classify(x+1,y,parentIdx); classify(x-1,y,parentIdx); classify(x,y+1,parentIdx); classify(x,y-1,parentIdx);
+  }
+  return mask;
+}
+/* lasso: scanline fill (even-odd rule) of a freehand polygon in image coords */
+function polygonMask(w,h,pts){
+  const mask=new Uint8Array(w*h);
+  if(pts.length<3) return mask;
+  let minY=h, maxY=0;
+  for(const p of pts){ if(p.y<minY) minY=p.y; if(p.y>maxY) maxY=p.y; }
+  minY=Math.max(0,Math.floor(minY)); maxY=Math.min(h-1,Math.ceil(maxY));
+  for(let y=minY;y<=maxY;y++){
+    const yc=y+0.5, xs=[];
+    for(let i=0;i<pts.length;i++){
+      const a=pts[i], b=pts[(i+1)%pts.length];
+      if((a.y<=yc&&b.y>yc)||(b.y<=yc&&a.y>yc)) xs.push(a.x+(yc-a.y)/(b.y-a.y)*(b.x-a.x));
+    }
+    xs.sort((a,b)=>a-b);
+    for(let i=0;i+1<xs.length;i+=2){
+      const x0=Math.max(0,Math.round(xs[i])), x1=Math.min(w-1,Math.round(xs[i+1]));
+      const rowOff=y*w;
+      for(let x=x0;x<=x1;x++) mask[rowOff+x]=1;
     }
   }
-  return alpha;
+  return mask;
+}
+/* union / subtract / replace a region into the running selection */
+function combineMaskInto(regionMask, mode){
+  const n=regionMask.length;
+  if(!RB.mask || RB.mask.length!==n) RB.mask=new Uint8Array(n);
+  if(mode==="new") RB.mask=regionMask;
+  else if(mode==="add"){ for(let i=0;i<n;i++) if(regionMask[i]) RB.mask[i]=1; }
+  else if(mode==="subtract"){ for(let i=0;i<n;i++) if(regionMask[i]) RB.mask[i]=0; }
+}
+/* separable box blur (O(w*h), any radius) turning a hard 0/1 mask into a
+   soft-edged alpha for feathering */
+function boxBlurMask(mask,w,h,radius){
+  if(radius<=0) return Float32Array.from(mask);
+  const tmp=new Float32Array(w*h), out=new Float32Array(w*h), span=radius*2+1;
+  for(let y=0;y<h;y++){
+    const rowOff=y*w;
+    let sum=0;
+    for(let x=-radius;x<=radius;x++) sum+=mask[rowOff+clamp(x,0,w-1)];
+    for(let x=0;x<w;x++){
+      tmp[rowOff+x]=sum/span;
+      sum += mask[rowOff+clamp(x+radius+1,0,w-1)] - mask[rowOff+clamp(x-radius,0,w-1)];
+    }
+  }
+  for(let x=0;x<w;x++){
+    let sum=0;
+    for(let y=-radius;y<=radius;y++) sum+=tmp[clamp(y,0,h-1)*w+x];
+    for(let y=0;y<h;y++){
+      out[y*w+x]=sum/span;
+      sum += tmp[clamp(y+radius+1,0,h-1)*w+x] - tmp[clamp(y-radius,0,h-1)*w+x];
+    }
+  }
+  return out;
 }
 
 /* live preview state: RB.previewImg overrides what draw() renders while the
-   dialog is open, without touching S.img until the user clicks Apply */
-const RB = { active:false, baseId:null, previewImg:null, timer:null };
+   dialog is open, without touching S.img until the user clicks Apply.
+   RB.mask is the running boolean selection (1 = will be removed), built up
+   by wand clicks, lasso drags, and the Auto-edges/Invert/Clear actions. */
+const RB = { active:false, baseId:null, srcCanvas:null, previewImg:null, timer:null,
+             mask:null, tool:"wand", lassoPts:null, lassoDragging:false, lassoMode:"new",
+             pvScale:1, pvOffX:0, pvOffY:0, zoom:1, panX:0, panY:0, panning:false,
+             panStartX:0, panStartY:0, panOrigX:0, panOrigY:0 };
 
 function currentDisplayImage(){ return (RB.active && RB.previewImg) ? RB.previewImg : S.img; }
 
 function rbComputePreview(){
-  if(!RB.active || !RB.baseId) return;
-  $("rbStatus").textContent="Updating preview…";
-  requestAnimationFrame(()=>{
-    const tolerance=+$("rbTolerance").value, feather=+$("rbFeather").value;
-    const w=RB.baseId.width, h=RB.baseId.height;
-    const out=new ImageData(new Uint8ClampedArray(RB.baseId.data), w, h);
-    const alpha=computeBackgroundAlpha(RB.baseId, tolerance, feather);
-    const data=out.data;
-    for(let p=0;p<alpha.length;p++){
-      if(alpha[p]<1) data[p*4+3]=Math.round(RB.baseId.data[p*4+3]*alpha[p]);
-    }
-    const c=document.createElement("canvas"); c.width=w; c.height=h;
-    c.getContext("2d").putImageData(out,0,0);
-    RB.previewImg=c;
-    $("rbStatus").textContent="";
-    draw();
-  });
+  if(!RB.active || !RB.baseId || !RB.mask) return;
+  const feather=+$("rbFeather").value;
+  const w=RB.baseId.width, h=RB.baseId.height;
+  const removedFrac=boxBlurMask(RB.mask,w,h,feather);
+  const out=new ImageData(new Uint8ClampedArray(RB.baseId.data), w, h);
+  const data=out.data;
+  for(let p=0;p<removedFrac.length;p++){
+    const keep=1-removedFrac[p];
+    if(keep<1) data[p*4+3]=Math.round(RB.baseId.data[p*4+3]*keep);
+  }
+  const c=document.createElement("canvas"); c.width=w; c.height=h;
+  c.getContext("2d").putImageData(out,0,0);
+  RB.previewImg=c;
+  draw();
+  rbRenderThumb();
 }
 function rbScheduleUpdate(){
   clearTimeout(RB.timer);
-  RB.timer=setTimeout(rbComputePreview, 120);
+  RB.timer=setTimeout(rbComputePreview, 80);
 }
 
-$("rbTolerance").addEventListener("input",()=>{ $("rbTolVal").textContent=$("rbTolerance").value; rbScheduleUpdate(); });
+/* resize the canvas's backing pixel buffer to match its rendered CSS box —
+   the dialog is now large and viewport-relative, so this can't be a fixed
+   width/height attribute like before */
+function rbResizeCanvas(){
+  const wrap=$("rbCanvasWrap"), cvs=$("rbPreviewCanvas");
+  const w=Math.max(100, Math.round(wrap.clientWidth));
+  const h=Math.max(100, Math.round(wrap.clientHeight));
+  if(cvs.width!==w || cvs.height!==h){ cvs.width=w; cvs.height=h; }
+}
+window.addEventListener("resize", ()=>{ if(RB.active){ rbResizeCanvas(); rbRenderThumb(); } });
+
+/* base "fit whole image in the box" scale, before the user's manual zoom */
+function rbFitScale(){
+  const cvs=$("rbPreviewCanvas");
+  return Math.min(cvs.width/RB.baseId.width, cvs.height/RB.baseId.height);
+}
+function rbRenderThumb(){
+  const cvs=$("rbPreviewCanvas"), ctx=cvs.getContext("2d");
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  if(!RB.baseId) return;
+  const w=RB.baseId.width, h=RB.baseId.height;
+  const scale=rbFitScale()*RB.zoom;
+  const dw=w*scale, dh=h*scale;
+  let ox=(cvs.width-dw)/2+RB.panX, oy=(cvs.height-dh)/2+RB.panY;
+  // clamp panning so the image can't be dragged fully out of view once zoomed in
+  ox = dw>cvs.width ? clamp(ox, cvs.width-dw, 0) : (cvs.width-dw)/2;
+  oy = dh>cvs.height ? clamp(oy, cvs.height-dh, 0) : (cvs.height-dh)/2;
+  RB.pvScale=scale; RB.pvOffX=ox; RB.pvOffY=oy;
+  if(!RB.srcCanvas){
+    RB.srcCanvas=document.createElement("canvas");
+    RB.srcCanvas.width=w; RB.srcCanvas.height=h;
+    RB.srcCanvas.getContext("2d").putImageData(RB.baseId,0,0);
+  }
+  ctx.imageSmoothingEnabled = RB.zoom<=2;
+  ctx.drawImage(RB.srcCanvas,0,0,w,h, ox,oy,dw,dh);
+  if(RB.mask){
+    // only read back the visible (clipped-to-canvas) region — needed now that
+    // zoomed content can extend past the canvas edges
+    const iox=Math.max(0,Math.round(ox)), ioy=Math.max(0,Math.round(oy));
+    const iw=Math.min(cvs.width,Math.ceil(ox+dw))-iox, ih=Math.min(cvs.height,Math.ceil(oy+dh))-ioy;
+    if(iw>0 && ih>0){
+      const img=ctx.getImageData(iox,ioy,iw,ih), d=img.data;
+      for(let ty=0; ty<ih; ty++){
+        const iy=Math.floor((ty+ioy-oy)/scale);
+        if(iy<0||iy>=h) continue;
+        for(let tx=0; tx<iw; tx++){
+          const ix=Math.floor((tx+iox-ox)/scale);
+          if(ix<0||ix>=w) continue;
+          if(RB.mask[iy*w+ix]){
+            const p=(ty*iw+tx)*4;
+            d[p]=Math.round(d[p]*0.5+255*0.5);
+            d[p+1]=Math.round(d[p+1]*0.5);
+            d[p+2]=Math.round(d[p+2]*0.5+150*0.5);
+          }
+        }
+      }
+      ctx.putImageData(img,iox,ioy);
+    }
+  }
+  if(RB.lassoPts && RB.lassoPts.length>1){
+    ctx.strokeStyle="#6ad4ff"; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    RB.lassoPts.forEach((p,i)=>{
+      const sx=ox+p.x*scale, sy=oy+p.y*scale;
+      if(i===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
+    });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  if(RB.zoom>1.01) drawZoomBadge(ctx, cvs.width);
+}
+function drawZoomBadge(ctx, canvasWidth){
+  const label=Math.round(RB.zoom*100)+"%";
+  ctx.font="11px ui-monospace,monospace";
+  const tw=ctx.measureText(label).width;
+  ctx.fillStyle="rgba(16,17,22,.75)";
+  ctx.fillRect(canvasWidth-tw-16, 8, tw+10, 18);
+  ctx.fillStyle="#8b90a0";
+  ctx.fillText(label, canvasWidth-tw-11, 21);
+}
+
+function rbSetTool(t){
+  RB.tool=t;
+  $("btnRbWand").classList.toggle("on", t==="wand");
+  $("btnRbLasso").classList.toggle("on", t==="lasso");
+  $("rbPreviewCanvas").classList.toggle("rb-tool-wand", t==="wand");
+  $("rbPreviewCanvas").classList.toggle("rb-tool-lasso", t==="lasso");
+}
+$("btnRbWand").addEventListener("click",()=>rbSetTool("wand"));
+$("btnRbLasso").addEventListener("click",()=>rbSetTool("lasso"));
+$("btnRbAuto").addEventListener("click",()=>{
+  if(!RB.baseId) return;
+  combineMaskInto(autoEdgeMask(RB.baseId, +$("rbTolerance").value), "new");
+  rbComputePreview();
+});
+$("btnRbInvert").addEventListener("click",()=>{
+  if(!RB.mask) return;
+  for(let i=0;i<RB.mask.length;i++) RB.mask[i]=RB.mask[i]?0:1;
+  rbComputePreview();
+});
+$("btnRbClear").addEventListener("click",()=>{
+  if(!RB.baseId) return;
+  RB.mask=new Uint8Array(RB.baseId.width*RB.baseId.height);
+  rbComputePreview();
+});
+
+function rbImgCoords(e){
+  const rect=$("rbPreviewCanvas").getBoundingClientRect();
+  const px=e.clientX-rect.left, py=e.clientY-rect.top;
+  return { x:Math.floor((px-RB.pvOffX)/RB.pvScale), y:Math.floor((py-RB.pvOffY)/RB.pvScale) };
+}
+$("rbPreviewCanvas").addEventListener("contextmenu", e=>e.preventDefault());
+$("rbPreviewCanvas").addEventListener("wheel", e=>{
+  if(!RB.baseId) return;
+  e.preventDefault();
+  const rect=$("rbPreviewCanvas").getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const ixBefore=(mx-RB.pvOffX)/RB.pvScale, iyBefore=(my-RB.pvOffY)/RB.pvScale;
+  RB.zoom=clamp(RB.zoom*(e.deltaY<0?1.15:1/1.15), 1, 10);
+  const cvs=$("rbPreviewCanvas"), newScale=rbFitScale()*RB.zoom;
+  RB.panX = mx - ixBefore*newScale - (cvs.width-RB.baseId.width*newScale)/2;
+  RB.panY = my - iyBefore*newScale - (cvs.height-RB.baseId.height*newScale)/2;
+  rbRenderThumb();
+},{passive:false});
+$("rbPreviewCanvas").addEventListener("dblclick", ()=>{
+  RB.zoom=1; RB.panX=0; RB.panY=0; rbRenderThumb();
+});
+$("rbPreviewCanvas").addEventListener("pointerdown", e=>{
+  if(!RB.baseId) return;
+  if(e.button===2){
+    RB.panning=true; RB.panStartX=e.clientX; RB.panStartY=e.clientY;
+    RB.panOrigX=RB.panX; RB.panOrigY=RB.panY;
+    e.target.setPointerCapture(e.pointerId);
+    return;
+  }
+  if(e.button!==0) return;
+  const {x:ix,y:iy}=rbImgCoords(e);
+  if(ix<0||iy<0||ix>=RB.baseId.width||iy>=RB.baseId.height) return;
+  const mode = e.altKey ? "subtract" : (e.shiftKey ? "add" : "new");
+  if(RB.tool==="wand"){
+    combineMaskInto(wandMask(RB.baseId, ix, iy, +$("rbTolerance").value), mode);
+    rbComputePreview();
+  } else {
+    RB.lassoMode=mode;
+    RB.lassoPts=[{x:ix,y:iy}];
+    RB.lassoDragging=true;
+    e.target.setPointerCapture(e.pointerId);
+    rbRenderThumb();
+  }
+});
+$("rbPreviewCanvas").addEventListener("pointermove", e=>{
+  if(RB.panning){
+    RB.panX = RB.panOrigX + (e.clientX-RB.panStartX);
+    RB.panY = RB.panOrigY + (e.clientY-RB.panStartY);
+    rbRenderThumb();
+    return;
+  }
+  if(!RB.lassoDragging) return;
+  const {x:ix,y:iy}=rbImgCoords(e);
+  const cix=clamp(ix,0,RB.baseId.width-1), ciy=clamp(iy,0,RB.baseId.height-1);
+  const last=RB.lassoPts[RB.lassoPts.length-1];
+  if(!last || Math.hypot(cix-last.x,ciy-last.y)>=2){ RB.lassoPts.push({x:cix,y:ciy}); rbRenderThumb(); }
+});
+$("rbPreviewCanvas").addEventListener("pointerup", ()=>{
+  if(RB.panning){ RB.panning=false; return; }
+  if(!RB.lassoDragging) return;
+  RB.lassoDragging=false;
+  if(RB.lassoPts && RB.lassoPts.length>=3){
+    combineMaskInto(polygonMask(RB.baseId.width, RB.baseId.height, RB.lassoPts), RB.lassoMode);
+  }
+  RB.lassoPts=null;
+  rbComputePreview();
+});
+
+$("rbTolerance").addEventListener("input",()=>{ $("rbTolVal").textContent=$("rbTolerance").value; });
 $("rbFeather").addEventListener("input",()=>{ $("rbFeatherVal").textContent=$("rbFeather").value; rbScheduleUpdate(); });
 
 $("btnRemoveBG").addEventListener("click",()=>{
@@ -2120,14 +2439,22 @@ $("btnRemoveBG").addEventListener("click",()=>{
   const c=document.createElement("canvas"); c.width=S.img.width; c.height=S.img.height;
   const cctx=c.getContext("2d"); cctx.drawImage(S.img,0,0);
   RB.baseId=cctx.getImageData(0,0,c.width,c.height);
+  RB.srcCanvas=null;
   RB.active=true; RB.previewImg=null;
+  RB.lassoPts=null; RB.lassoDragging=false;
+  RB.zoom=1; RB.panX=0; RB.panY=0; RB.panning=false;
+  RB.mask=autoEdgeMask(RB.baseId, +$("rbTolerance").value);
+  rbSetTool("wand");
   $("rbStatus").textContent="";
   $("dlgRemoveBG").showModal();
+  rbResizeCanvas();
   rbComputePreview();
 });
 
 function rbClosePreview(){
-  RB.active=false; RB.previewImg=null; RB.baseId=null;
+  RB.active=false; RB.previewImg=null; RB.baseId=null; RB.srcCanvas=null;
+  RB.mask=null; RB.lassoPts=null; RB.lassoDragging=false;
+  RB.zoom=1; RB.panX=0; RB.panY=0; RB.panning=false;
   clearTimeout(RB.timer);
   draw();
 }
@@ -2162,7 +2489,7 @@ $("fileProj").addEventListener("change",e=>{
         S.slices=(d.slices||[]).map(s=>({format:"",...s}));
         nextId = Math.max(0,...S.slices.map(s=>s.id))+1;
         S.guides=d.guides||{v:[],h:[]}; S.selId=null;
-        undoStack=[]; redoStack=[]; updateUndoButtons();
+        undoStack=[]; redoStack=[]; updateUndoButtons(); dirty=false;
         $("drop").classList.add("hide");
         $("sImg").textContent=`${S.W}×${S.H}`;
         fit(); refreshAll();
@@ -2610,6 +2937,16 @@ updateUndoButtons();
 renderTemplateList();
 batchRefreshUI();
 resize();
+
+/* browser-native "leave site?" prompt — the closest web equivalent to a
+   desktop app's Save/Don't Save/Cancel dialog. Browsers don't allow custom
+   buttons or triggering a save from here; they just show their own generic
+   confirmation when this fires. */
+window.addEventListener("beforeunload", e=>{
+  if(!dirty) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
