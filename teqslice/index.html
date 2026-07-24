@@ -153,6 +153,31 @@ footer .mono{color:var(--ink)}
 }
 .anim-btn:hover{background:#2d3039}
 .anim-btn.on{background:var(--accent); color:#06232f; border-color:transparent}
+#btnPreview:not(:disabled){background:var(--accent); color:#06232f; border-color:transparent; font-weight:600}
+#btnPreview:not(:disabled):hover{background:#6ad4ff}
+@keyframes tsPulse{
+  0%,100%{ box-shadow:0 0 0 0 rgba(69,200,255,.55); }
+  50%{ box-shadow:0 0 0 7px rgba(69,200,255,0); }
+}
+#btnPreview.hint{ animation:tsPulse 1.4s ease-out 4; }
+#animSeamWarn{
+  display:none; align-items:center; gap:6px; color:#ffcf4c; font-size:12px;
+  background:rgba(255,207,76,.1); border:1px solid rgba(255,207,76,.35);
+  border-radius:6px; padding:4px 10px;
+}
+#animSeamWarn.show{display:flex}
+#animFilmstrip{
+  display:flex; gap:4px; overflow-x:auto; max-width:88vw; padding:4px;
+  background:var(--panel2); border:1px solid var(--edge); border-radius:8px;
+}
+.filmthumb{
+  position:relative; width:44px; height:44px; flex:0 0 auto; cursor:pointer;
+  border-radius:5px; border:2px solid transparent; overflow:hidden;
+  background:#22242b; display:flex; align-items:center; justify-content:center;
+}
+.filmthumb canvas{ image-rendering:pixelated; max-width:100%; max-height:100%; }
+.filmthumb.cur{border-color:var(--accent)}
+.filmthumb .fnum{ position:absolute; bottom:0; right:2px; font-size:9px; color:var(--faint); font-family:ui-monospace,monospace }
 #animClose{
   position:absolute; top:20px; right:24px;
   background:transparent; border:none; color:var(--dim); font-size:22px; cursor:pointer;
@@ -265,12 +290,13 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <button class="btn" id="btnCanvas">Canvas…</button>
   <button class="btn" id="btnRemoveBG" disabled>Remove BG…</button>
   <button class="btn" id="btnGrid">Grid slice…</button>
+  <button class="btn" id="btnDetect" disabled title="Smart Slice Detection — auto-find isolated objects">Detect objects…</button>
   <button class="btn" id="btnDivide" disabled>Divide slice…</button>
   <button class="btn" id="btnFromGuides">Slices from guides</button>
   <button class="btn" id="btnClearGuides">Clear guides</button>
 
   <div class="spacer"></div>
-  <button class="btn" id="btnPreview" disabled title="Animation Preview (P)">▶ Preview</button>
+  <button class="btn" id="btnPreview" disabled title="Animation Preview — play your slices as frames (P)">▶ Preview animation</button>
   <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
   <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
   <div class="sep"></div>
@@ -443,6 +469,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 
 <footer>
   <span>pos <span class="mono" id="sPos">—</span></span>
+  <span>color <span class="mono" id="sColor">—</span></span>
   <span>image <span class="mono" id="sImg">—</span></span>
   <span>zoom <span class="mono" id="sZoom">100%</span></span>
   <span>slices <span class="mono" id="sSlices">0</span></span>
@@ -477,7 +504,9 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 <div id="animOverlay" class="hide">
   <button id="animClose" title="Close (Esc)">✕</button>
   <canvas id="animCanvas"></canvas>
+  <div id="animSeamWarn" title="The first and last frame differ by more than a few pixels — the loop may visibly pop.">⚠ <span id="animSeamText">loop seam mismatch</span></div>
   <div id="animInfo">frame 1 / 1 &nbsp;·&nbsp; 0×0</div>
+  <div id="animFilmstrip"></div>
   <div class="anim-controls">
     <button class="anim-btn" id="animPrev" title="Previous frame">⏮</button>
     <button class="anim-btn" id="animPlayPause" title="Play/Pause (Space)">▶ Play</button>
@@ -486,6 +515,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
     <label>FPS <input type="number" id="animFps" value="12" min="1" max="60" style="width:46px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
     <button class="anim-btn" id="animPingpong" title="Ping-pong mode">⇄</button>
     <button class="anim-btn" id="animLoop" title="Loop" style="min-width:60px">Loop ✓</button>
+    <button class="anim-btn" id="animOnion" title="Onion skin — ghost the previous frame to check alignment">Onion skin</button>
     <div class="sep"></div>
     <span id="animScale" style="color:var(--dim); font-size:12px"></span>
   </div>
@@ -553,6 +583,51 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <div class="actions">
     <button class="btn" id="gCancel">Cancel</button>
     <button class="btn primary" id="gOk">Slice</button>
+  </div>
+</dialog>
+
+<!-- Smart Slice Detection dialog -->
+<dialog id="dlgDetect">
+  <h3>Detect objects</h3>
+  <fieldset>
+    <legend>Background</legend>
+    <div class="row"><input type="radio" name="dtBgMode" id="dtBgAlpha" checked><label style="min-width:0">Transparency (alpha channel)</label></div>
+    <div class="row"><input type="radio" name="dtBgMode" id="dtBgColor"><label style="min-width:0">Flat color / checkerboard (no real transparency)</label></div>
+  </fieldset>
+  <div class="row" id="dtAlphaRow"><label style="min-width:100px">Alpha threshold</label>
+    <input type="range" id="dtAlpha" min="1" max="254" value="16">
+    <span class="mono" id="dtAlphaVal" style="min-width:32px; color:var(--dim)">16</span>
+  </div>
+  <div class="row" id="dtColorRow" style="display:none"><label style="min-width:100px">Color tolerance</label>
+    <input type="range" id="dtColorTol" min="1" max="64" value="18">
+    <span class="mono" id="dtColorTolVal" style="min-width:32px; color:var(--dim)">18</span>
+  </div>
+  <div class="row"><label style="min-width:100px">Min object size</label>
+    <input type="range" id="dtMinSize" min="1" max="128" value="4">
+    <span class="mono" id="dtMinSizeVal" style="min-width:32px; color:var(--dim)">4px</span>
+  </div>
+  <div class="row"><label style="min-width:100px">Merge distance</label>
+    <input type="range" id="dtMerge" min="0" max="16" value="0">
+    <span class="mono" id="dtMergeVal" style="min-width:32px; color:var(--dim)">0px</span>
+  </div>
+  <label class="check"><input type="checkbox" id="dtReplace"> Replace existing slices</label>
+  <div id="dtInfo" class="mono" style="color:var(--dim); font-size:11px; margin-top:6px">Run detection to preview results.</div>
+  <div class="dlgNote">
+    Transparency mode finds disconnected opaque regions using the alpha
+    channel. Flat color mode is for sheets that were exported without real
+    transparency (a solid background color, or a checkerboard baked into the
+    pixels as flat colors) — it samples the sheet's dominant background
+    color(s) automatically and treats close matches as empty space instead.
+    We pick a starting mode based on this image, but switch manually if it
+    guesses wrong. Objects closer than the merge distance are treated as
+    one. Results are added as ordinary, editable slices — nothing is
+    committed until you close this dialog, and you can merge, resize, or
+    delete any proposed slice afterward with the normal slicing tools.
+  </div>
+  <div class="actions">
+    <button class="btn" id="dtCancel">Cancel</button>
+    <button class="btn" id="dtRun">Preview detection</button>
+    <button class="btn primary" id="dtOk" disabled>Add slices</button>
   </div>
 </dialog>
 
@@ -1232,7 +1307,20 @@ function hitGuide(px,py){
 cv.addEventListener("pointerleave", ()=>{
   const el=document.getElementById("eraseCursor");
   if(el) el.style.display="none";
+  $("sColor").textContent="—";
 });
+
+/* ---------- pixel inspector (FEAT-P1-22) ---------- */
+function updatePixelInspector(wx, wy){
+  const ix=Math.floor(wx), iy=Math.floor(wy);
+  if(!S.img || ix<0 || iy<0 || ix>=S.W || iy>=S.H){ $("sColor").textContent="—"; return; }
+  let d;
+  try{ d = S.img.getContext("2d").getImageData(ix,iy,1,1).data; }
+  catch(err){ $("sColor").textContent="—"; return; }
+  const [r,g,b,a]=d;
+  const hex = "#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
+  $("sColor").textContent = `${hex} rgba(${r},${g},${b},${(a/255).toFixed(2)}) @ ${ix},${iy}`;
+}
 
 cv.addEventListener("mousedown", e=>{ if(e.button===1) e.preventDefault(); });
 cv.addEventListener("auxclick", e=>{ if(e.button===1) e.preventDefault(); });
@@ -1327,6 +1415,7 @@ cv.addEventListener("pointermove", e=>{
   if(S.img){
     const wx=s2wX(px), wy=s2wY(py);
     $("sPos").textContent = `${Math.round(wx)}, ${Math.round(wy)}`;
+    updatePixelInspector(wx,wy);
   }
   if(!drag){ updateCursor(px,py); draw(); return; }
 
@@ -1461,15 +1550,22 @@ cv.addEventListener("wheel", e=>{
   e.preventDefault();
   const px=e.offsetX, py=e.offsetY;
   const f = e.deltaY<0 ? 1.15 : 1/1.15;
-  zoomAt(px,py,S.zoom*f);
+  let nz = S.zoom*f;
+  // Shift+wheel: snap to the nearest integer zoom level for crisp pixel-art work
+  if(e.shiftKey) nz = Math.max(1, Math.round(nz));
+  zoomAt(px,py,nz);
 },{passive:false});
 
+function zoomLabel(nz){
+  const pct = Math.round(nz*100)+"%";
+  return (S.pixel && nz>=1 && Number.isInteger(nz)) ? `${pct} · ${nz}× pixel-perfect` : pct;
+}
 function zoomAt(px,py,nz){
   nz = clamp(nz, 0.05, 64);
   const wx=s2wX(px), wy=s2wY(py);
   S.zoom=nz;
   S.ox = px - wx*nz; S.oy = py - wy*nz;
-  $("sZoom").textContent = Math.round(nz*100)+"%";
+  $("sZoom").textContent = zoomLabel(nz);
   draw();
 }
 function fit(){
@@ -1478,7 +1574,7 @@ function fit(){
   const z = Math.min((r.width-60)/S.W,(r.height-60)/S.H,8);
   S.zoom=Math.max(0.05,z);
   S.ox=(r.width-S.W*S.zoom)/2; S.oy=(r.height-S.H*S.zoom)/2;
-  $("sZoom").textContent=Math.round(S.zoom*100)+"%";
+  $("sZoom").textContent=zoomLabel(S.zoom);
   draw();
 }
 
@@ -1561,7 +1657,20 @@ function refreshAll(){
   $("btnSaveTemplate").disabled = !S.slices.length;
   $("btnSaveImage").disabled = !S.img;
   $("btnRemoveBG").disabled = !S.img;
+  $("btnDetect").disabled = !S.img;
+  maybeHintPreview();
   draw();
+}
+
+// Nudge first-time users toward the animation preview once they have enough
+// slices for it to be worth trying, without nagging on every render.
+function maybeHintPreview(){
+  const btn=$("btnPreview");
+  if(btn.disabled || S.slices.length<2 || localStorage.getItem("ts_seenAnimPreview")){
+    btn.classList.remove("hint");
+    return;
+  }
+  btn.classList.add("hint");
 }
 
 /* property inputs */
@@ -1789,6 +1898,209 @@ $("gOk").addEventListener("click",()=>{
     }
   }
   $("dlgGrid").close(); refreshAll();
+});
+
+/* ============================== smart slice detection (FEAT-P1-01/02/04) ============================== */
+const DT = {results:null};
+
+function dtMaxFilter1D(src, W, H, r, horizontal){
+  if(r<=0) return src;
+  const out = new Uint8Array(W*H);
+  if(horizontal){
+    for(let y=0;y<H;y++){
+      const rowOff=y*W;
+      for(let x=0;x<W;x++){
+        let m=0;
+        const lo=Math.max(0,x-r), hi=Math.min(W-1,x+r);
+        for(let xx=lo; xx<=hi; xx++){ if(src[rowOff+xx]){ m=1; break; } }
+        out[rowOff+x]=m;
+      }
+    }
+  } else {
+    for(let x=0;x<W;x++){
+      for(let y=0;y<H;y++){
+        let m=0;
+        const lo=Math.max(0,y-r), hi=Math.min(H-1,y+r);
+        for(let yy=lo; yy<=hi; yy++){ if(src[yy*W+x]){ m=1; break; } }
+        out[y*W+x]=m;
+      }
+    }
+  }
+  return out;
+}
+function dtDilate(mask, W, H, r){
+  if(r<=0) return mask;
+  return dtMaxFilter1D(dtMaxFilter1D(mask,W,H,r,true), W,H,r,false);
+}
+
+// Finds the 1-2 most common colors in the image (coarse-quantized, sparse
+// sampled for speed). On a real image this is almost always the background
+// — used as the "empty space" reference for color-mode detection.
+function dtDominantColors(id, W, H){
+  const bucket = 8;
+  const counts = new Map();
+  const n = W*H;
+  const stride = Math.max(1, Math.floor(n/200000)); // cap sample count on huge images
+  for(let i=0; i<n; i+=stride){
+    const o=i*4;
+    const r=(id[o]/bucket|0)*bucket, g=(id[o+1]/bucket|0)*bucket, b=(id[o+2]/bucket|0)*bucket;
+    const key = r*65536+g*256+b;
+    counts.set(key, (counts.get(key)||0)+1);
+  }
+  const sorted = [...counts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,2);
+  return sorted.map(([key])=>[Math.floor(key/65536)%256, Math.floor(key/256)%256, key%256]);
+}
+
+// Quick check for whether this image has any real alpha variance at all —
+// used to auto-pick a sensible starting detection mode per image.
+function dtHasRealAlpha(id, W, H){
+  const n=W*H;
+  const stride = Math.max(1, Math.floor(n/50000));
+  for(let i=0; i<n; i+=stride){ if(id[i*4+3] < 250) return true; }
+  return false;
+}
+
+// Detects disconnected foreground regions and proposes one slice per
+// object. mode "alpha" reads the alpha channel; mode "color" treats pixels
+// close to the sheet's own dominant background color(s) as empty instead
+// (for sheets exported without real transparency). Optionally dilated by
+// mergeDist so nearby fragments merge into one object. Returns proposed
+// slice rects in image space; nothing is written to S.slices here —
+// callers decide when to commit.
+function detectObjects(mode, alphaThreshold, colorTolerance, minSize, mergeDist){
+  if(!S.img) return {rects:[], truncated:false};
+  const W=S.W, H=S.H, n=W*H;
+  const id = S.img.getContext("2d").getImageData(0,0,W,H).data;
+  const mask = new Uint8Array(n);
+
+  if(mode==="color"){
+    const bg = dtDominantColors(id, W, H);
+    for(let i=0;i<n;i++){
+      const o=i*4;
+      const r=id[o], g=id[o+1], b=id[o+2];
+      let isBg=false;
+      for(const c of bg){
+        if(Math.abs(r-c[0])<=colorTolerance && Math.abs(g-c[1])<=colorTolerance && Math.abs(b-c[2])<=colorTolerance){ isBg=true; break; }
+      }
+      mask[i] = isBg ? 0 : 1;
+    }
+  } else {
+    for(let i=0;i<n;i++) mask[i] = id[i*4+3] > alphaThreshold ? 1 : 0;
+  }
+
+  const work = dtDilate(mask, W, H, mergeDist);
+  const labels = new Int32Array(n).fill(-1);
+  const qx = new Int32Array(n), qy = new Int32Array(n);
+  const rects = [];
+  const MAX_OBJECTS = 5000; // sanity guard against pathological/noisy input
+  let truncated = false;
+
+  for(let y=0; y<H && !truncated; y++){
+    for(let x=0; x<W; x++){
+      const idx = y*W+x;
+      if(work[idx]!==1 || labels[idx]!==-1) continue;
+      let head=0, tail=0;
+      qx[tail]=x; qy[tail]=y; tail++; labels[idx]=1;
+      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity, hasOriginal=false;
+      while(head<tail){
+        const cx=qx[head], cy=qy[head]; head++;
+        const cidx=cy*W+cx;
+        if(mask[cidx]===1){ hasOriginal=true; if(cx<minX)minX=cx; if(cx>maxX)maxX=cx; if(cy<minY)minY=cy; if(cy>maxY)maxY=cy; }
+        for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+          if(dx===0 && dy===0) continue;
+          const nx=cx+dx, ny=cy+dy;
+          if(nx<0||ny<0||nx>=W||ny>=H) continue;
+          const nidx=ny*W+nx;
+          if(work[nidx]===1 && labels[nidx]===-1){ labels[nidx]=1; qx[tail]=nx; qy[tail]=ny; tail++; }
+        }
+      }
+      if(hasOriginal){
+        const w=maxX-minX+1, h=maxY-minY+1;
+        if(w>=minSize && h>=minSize) rects.push({x:minX,y:minY,w,h});
+        if(rects.length>=MAX_OBJECTS){ truncated=true; break; }
+      }
+    }
+  }
+  rects.sort((a,b)=> a.y-b.y || a.x-b.x);
+  return {rects, truncated};
+}
+
+function dtSyncMode(){
+  const colorMode = $("dtBgColor").checked;
+  $("dtAlphaRow").style.display = colorMode ? "none" : "flex";
+  $("dtColorRow").style.display = colorMode ? "flex" : "none";
+}
+$("dtBgAlpha").addEventListener("change",dtSyncMode);
+$("dtBgColor").addEventListener("change",dtSyncMode);
+
+$("btnDetect").addEventListener("click",()=>{
+  if(!S.img) return;
+  DT.results = null;
+  $("dtOk").disabled = true;
+  $("dtInfo").textContent = "Run detection to preview results.";
+  // Auto-pick a starting mode: if the image has no real alpha variance,
+  // alpha-based detection can never split it, so default to color mode.
+  const id = S.img.getContext("2d").getImageData(0,0,S.W,S.H).data;
+  const hasAlpha = dtHasRealAlpha(id, S.W, S.H);
+  $("dtBgAlpha").checked = hasAlpha;
+  $("dtBgColor").checked = !hasAlpha;
+  dtSyncMode();
+  $("dlgDetect").showModal();
+});
+function dtSyncLabels(){
+  $("dtAlphaVal").textContent = $("dtAlpha").value;
+  $("dtColorTolVal").textContent = $("dtColorTol").value;
+  $("dtMinSizeVal").textContent = $("dtMinSize").value+"px";
+  $("dtMergeVal").textContent = $("dtMerge").value+"px";
+}
+["dtAlpha","dtColorTol","dtMinSize","dtMerge"].forEach(id=>$(id).addEventListener("input",dtSyncLabels));
+dtSyncLabels();
+$("dtCancel").addEventListener("click",()=>{ DT.results=null; $("dlgDetect").close(); });
+$("dtRun").addEventListener("click",()=>{
+  const mode = $("dtBgColor").checked ? "color" : "alpha";
+  const alphaT = +$("dtAlpha").value, colorTol = +$("dtColorTol").value;
+  const minSize = +$("dtMinSize").value, merge = +$("dtMerge").value;
+  $("dtInfo").textContent = "Detecting…";
+  // yield a frame so the "Detecting…" status paints before the synchronous scan
+  setTimeout(()=>{
+    const {rects, truncated} = detectObjects(mode, alphaT, colorTol, minSize, merge);
+    DT.results = rects;
+    let msg;
+    if(!rects.length){
+      msg = mode==="color"
+        ? "No objects found — try raising Color tolerance, or lowering Min object size."
+        : "No objects found at this threshold — try lowering it or reducing min size.";
+    } else {
+      msg = `Found ${rects.length} object${rects.length===1?"":"s"}.${truncated?" (stopped early — lower the threshold or raise min size)":""} Nothing is added until you click Add slices.`;
+      // A single result covering most of the canvas usually means nearby
+      // objects got welded together, or (in alpha mode) there's no real
+      // transparency to detect at all.
+      const imgArea = S.W*S.H;
+      const big = rects.filter(r => (r.w*r.h) >= imgArea*0.6);
+      if(rects.length===1 && big.length===1){
+        if(merge>0){
+          msg += " ⚠ That's the whole image — try lowering Merge distance, it's likely bridging small gaps between objects.";
+        } else if(mode==="alpha"){
+          msg += " ⚠ That's the whole image — this sheet may not have real transparency. Try Background: Flat color / checkerboard instead.";
+        } else {
+          msg += " ⚠ That's the whole image — try lowering Color tolerance, it's likely treating some of the artwork as background.";
+        }
+      }
+    }
+    $("dtInfo").textContent = msg;
+    $("dtOk").disabled = rects.length===0;
+  }, 10);
+});
+$("dtOk").addEventListener("click",()=>{
+  if(!DT.results || !DT.results.length){ $("dlgDetect").close(); return; }
+  pushUndo();
+  if($("dtReplace").checked){ S.slices=[]; S.selId=null; }
+  DT.results.forEach((r,i)=>{
+    const sl=newSlice(r.x,r.y,r.w,r.h);
+    sl.name=`${S.name}_obj${String(i+1).padStart(2,"0")}`;
+  });
+  DT.results=null;
+  $("dlgDetect").close(); refreshAll();
 });
 
 $("btnDivide").addEventListener("click",()=>{ if(selected()) $("dlgDivide").showModal(); });
@@ -2649,6 +2961,7 @@ const ANIM = {
   playing: false,
   pingpong: false,
   loop: true,
+  onion: false,
   dir: 1,
   frame: 0,
   fps: 12,
@@ -2681,8 +2994,67 @@ async function openPreview(){
   $("animScale").textContent = scale<1 ? `${Math.round(scale*100)}% zoom` : "1:1";
 
   $("animOverlay").classList.remove("hide");
+  buildFilmstrip();
+  updateSeamWarning();
   drawAnimFrame();
   if(ANIM.playing) startAnim();
+
+  localStorage.setItem("ts_seenAnimPreview","1");
+  $("btnPreview").classList.remove("hint");
+}
+
+/* frame filmstrip — quick scrub/jump without stepping one at a time */
+function buildFilmstrip(){
+  const el=$("animFilmstrip");
+  el.innerHTML="";
+  ANIM.frames.forEach((f,i)=>{
+    const thumb=document.createElement("div");
+    thumb.className="filmthumb";
+    const c=document.createElement("canvas");
+    const s=Math.min(40/f.width, 40/f.height, 1);
+    c.width=Math.max(1,Math.round(f.width*s)); c.height=Math.max(1,Math.round(f.height*s));
+    const cx=c.getContext("2d"); cx.imageSmoothingEnabled=false; cx.drawImage(f,0,0,c.width,c.height);
+    const num=document.createElement("span"); num.className="fnum"; num.textContent=i+1;
+    thumb.append(c,num);
+    thumb.title=`Frame ${i+1} — ${f.width}×${f.height}`;
+    thumb.addEventListener("click",()=>{ stopAnim(); ANIM.frame=i; drawAnimFrame(); });
+    el.appendChild(thumb);
+  });
+}
+function updateFilmstripSelection(){
+  const el=$("animFilmstrip");
+  [...el.children].forEach((t,i)=>{
+    const cur = i===ANIM.frame;
+    t.classList.toggle("cur", cur);
+    if(cur) t.scrollIntoView({block:"nearest", inline:"nearest"});
+  });
+}
+
+/* loop-seam inspector (FEAT-P2-08 lite) — flags a visibly popping loop */
+function computeLoopSeamMismatch(){
+  const frames=ANIM.frames;
+  if(frames.length<2) return null;
+  const a=frames[0], b=frames[frames.length-1];
+  if(a.width!==b.width || a.height!==b.height) return {sizeMismatch:true, diffPct:null};
+  const ca=document.createElement("canvas"); ca.width=a.width; ca.height=a.height;
+  const cb=document.createElement("canvas"); cb.width=b.width; cb.height=b.height;
+  const xa=ca.getContext("2d"), xb=cb.getContext("2d");
+  xa.drawImage(a,0,0); xb.drawImage(b,0,0);
+  const da=xa.getImageData(0,0,a.width,a.height).data, db=xb.getImageData(0,0,b.width,b.height).data;
+  let diff=0; const total=a.width*a.height;
+  for(let i=0;i<da.length;i+=4){
+    if(Math.abs(da[i]-db[i])>16 || Math.abs(da[i+1]-db[i+1])>16 || Math.abs(da[i+2]-db[i+2])>16 || Math.abs(da[i+3]-db[i+3])>16) diff++;
+  }
+  return {sizeMismatch:false, diffPct: diff/total*100};
+}
+function updateSeamWarning(){
+  const el=$("animSeamWarn");
+  const seam=computeLoopSeamMismatch();
+  if(!seam || (!seam.sizeMismatch && seam.diffPct<=3)){ el.classList.remove("show"); return; }
+  $("animSeamText").textContent = seam.sizeMismatch
+    ? "first and last frame are different sizes — the loop will jump"
+    : `loop seam mismatch — ${seam.diffPct.toFixed(1)}% of pixels differ between first and last frame`;
+  el.classList.add("show");
 }
 
 function drawAnimFrame(){
@@ -2690,8 +3062,16 @@ function drawAnimFrame(){
   if(!f) return;
   animCtx.clearRect(0,0,animCv.width,animCv.height);
   animCtx.imageSmoothingEnabled=false;
+  if(ANIM.onion && ANIM.frames.length>1){
+    const pi=(ANIM.frame-1+ANIM.frames.length)%ANIM.frames.length;
+    animCtx.save();
+    animCtx.globalAlpha=0.35;
+    animCtx.drawImage(ANIM.frames[pi],0,0,animCv.width,animCv.height);
+    animCtx.restore();
+  }
   animCtx.drawImage(f,0,0,animCv.width,animCv.height);
   $("animInfo").textContent=`frame ${ANIM.frame+1} / ${ANIM.frames.length}  ·  ${f.width}×${f.height}`;
+  updateFilmstripSelection();
 }
 
 function startAnim(){
@@ -2750,6 +3130,11 @@ $("animPingpong").addEventListener("click",()=>{
 $("animLoop").addEventListener("click",()=>{
   ANIM.loop=!ANIM.loop;
   $("animLoop").textContent=ANIM.loop?"Loop ✓":"Loop ✗";
+});
+$("animOnion").addEventListener("click",()=>{
+  ANIM.onion=!ANIM.onion;
+  $("animOnion").classList.toggle("on",ANIM.onion);
+  drawAnimFrame();
 });
 // keyboard inside preview
 $("animOverlay").addEventListener("keydown",e=>{
