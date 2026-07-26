@@ -153,8 +153,13 @@ footer .mono{color:var(--ink)}
 }
 .anim-btn:hover{background:#2d3039}
 .anim-btn.on{background:var(--accent); color:#06232f; border-color:transparent}
+.anim-btn.danger{border-color:#ff6b6b; color:#ff6b6b}
+.anim-btn.danger:hover{background:rgba(255,107,107,.12)}
 #btnPreview:not(:disabled){background:var(--accent); color:#06232f; border-color:transparent; font-weight:600}
 #btnPreview:not(:disabled):hover{background:#6ad4ff}
+#btnOpenVideo{border-color:var(--accent); color:var(--accent); font-weight:600}
+#btnOpenVideo:hover{background:rgba(69,200,255,.12)}
+#btnOpenVideo.hint{ animation:tsPulse 1.4s ease-out 4; }
 @keyframes tsPulse{
   0%,100%{ box-shadow:0 0 0 0 rgba(69,200,255,.55); }
   50%{ box-shadow:0 0 0 7px rgba(69,200,255,0); }
@@ -184,6 +189,64 @@ footer .mono{color:var(--ink)}
 }
 #animClose:hover{color:var(--ink)}
 #animInfo{color:var(--dim); font-size:12px; font-family:ui-monospace,monospace}
+
+/* ---------- video frame exporter ---------- */
+#videoOverlay{
+  position:fixed; inset:0; z-index:200; background:rgba(10,11,14,.92);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px;
+}
+#videoOverlay.hide{display:none}
+#vidEl{
+  border-radius:8px; border:1px solid var(--edge);
+  background:#000; max-width:90vw; max-height:60vh;
+}
+#vidClose{
+  position:absolute; top:20px; right:24px;
+  background:transparent; border:none; color:var(--dim); font-size:22px; cursor:pointer;
+}
+#vidClose:hover{color:var(--ink)}
+#vidInfo{color:var(--dim); font-size:12px; font-family:ui-monospace,monospace}
+#vidScrubRow{width:min(90vw,700px)}
+#vidScrub{accent-color:var(--accent)}
+
+/* ---------- sprite sheet builder ---------- */
+#sheetOverlay{
+  position:fixed; inset:0; z-index:200; background:rgba(10,11,14,.92);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:12px;
+}
+#sheetOverlay.hide{display:none}
+#sheetClose{
+  position:absolute; top:20px; right:24px;
+  background:transparent; border:none; color:var(--dim); font-size:22px; cursor:pointer;
+}
+#sheetClose:hover{color:var(--ink)}
+#sheetPreview{
+  image-rendering:pixelated; image-rendering:crisp-edges;
+  border-radius:8px; border:1px solid var(--edge);
+  background:#22242b; max-width:88vw; max-height:44vh;
+}
+#sheetInfo{color:var(--dim); font-size:12px; font-family:ui-monospace,monospace}
+#sheetFrameList{
+  display:flex; gap:4px; overflow-x:auto; max-width:88vw; padding:4px;
+  background:var(--panel2); border:1px solid var(--edge); border-radius:8px;
+  min-height:52px;
+}
+.sheetThumb{
+  position:relative; width:44px; height:44px; flex:0 0 auto; cursor:grab;
+  border-radius:5px; border:2px solid transparent; overflow:hidden;
+  background:#22242b; display:flex; align-items:center; justify-content:center;
+}
+.sheetThumb canvas{ image-rendering:pixelated; max-width:100%; max-height:100%; }
+.sheetThumb.dragover{border-color:var(--accent)}
+.sheetThumb .snum{ position:absolute; bottom:0; left:2px; font-size:9px; color:var(--faint); font-family:ui-monospace,monospace }
+.sheetThumb .sremove{
+  position:absolute; top:1px; right:1px; width:14px; height:14px; line-height:14px;
+  text-align:center; font-size:10px; background:rgba(0,0,0,.6); color:#fff;
+  border-radius:3px; cursor:pointer;
+}
+.sheetThumb .sremove:hover{background:#ff6b6b}
 /* ---------- templates ---------- */
 #templateList{display:flex; flex-direction:column; gap:4px; margin-bottom:8px; max-height:160px; overflow-y:auto}
 .tmpl-row{
@@ -286,6 +349,8 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 
   <div class="sep"></div>
   <button class="btn" id="btnOpen">Open image<kbd>⌘O</kbd></button>
+  <button class="btn" id="btnOpenVideo" title="Video Frame Exporter — scrub a video and export frames as PNGs">Video → Frames…</button>
+  <button class="btn" id="btnSpriteSheet" title="Sprite Sheet Builder — pack multiple frames into one sheet">Sprite Sheet…</button>
   <button class="btn" id="btnResize">Resize…</button>
   <button class="btn" id="btnCanvas">Canvas…</button>
   <button class="btn" id="btnRemoveBG" disabled>Remove BG…</button>
@@ -318,6 +383,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
           <div class="big">Drop an image here</div>
           <div>or paste (Ctrl+V) · or use <b>Open image</b></div>
           <div style="margin-top:10px; font-size:11px">PNG · JPEG · WebP · GIF · BMP</div>
+          <div style="margin-top:14px; font-size:11px; color:var(--accent)">Working from a video instead? Try <b>Video → Frames</b> above ↑</div>
         </div>
       </div>
     </div>
@@ -521,8 +587,96 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   </div>
 </div>
 
+<!-- Video Frame Exporter Overlay -->
+<div id="videoOverlay" class="hide">
+  <button id="vidClose" title="Close (Esc)">✕</button>
+  <video id="vidEl" muted playsinline></video>
+  <div id="vidInfo">no video loaded</div>
+  <div class="anim-controls" id="vidScrubRow">
+    <span id="vidTimeCur" class="mono" style="min-width:80px">00:00.000</span>
+    <input type="range" id="vidScrub" min="0" max="1000" value="0" style="flex:1; min-width:260px">
+    <span id="vidTimeDur" class="mono" style="min-width:80px">00:00.000</span>
+  </div>
+  <div class="anim-controls">
+    <button class="anim-btn" id="vidPrev" title="Previous frame (based on FPS below)">⏮</button>
+    <button class="anim-btn" id="vidPlayPause" title="Play/Pause (Space)">▶ Play</button>
+    <button class="anim-btn" id="vidNext" title="Next frame (based on FPS below)">⏭</button>
+    <div class="sep"></div>
+    <label>FPS <input type="number" id="vidFps" value="30" min="1" max="120" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <span style="color:var(--faint); font-size:11px">used for frame stepping &amp; range export spacing</span>
+  </div>
+  <div class="anim-controls">
+    <label>Start <input type="text" id="vidStartTxt" class="mono" value="00:00.000" style="width:80px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <button class="anim-btn" id="vidSetStart" title="Set start to current playhead">Set = current</button>
+    <div class="sep"></div>
+    <label>End <input type="text" id="vidEndTxt" class="mono" value="00:00.000" style="width:80px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <button class="anim-btn" id="vidSetEnd" title="Set end to current playhead">Set = current</button>
+    <button class="anim-btn" id="vidFullRange">Use full video</button>
+    <div class="sep"></div>
+    <span id="vidRangeCount" class="mono" style="color:var(--dim); font-size:12px"></span>
+  </div>
+  <div class="anim-controls">
+    <button class="anim-btn on" id="vidExportFrame">Export current frame (PNG)</button>
+    <button class="anim-btn on" id="vidExportRange">Export range as ZIP…</button>
+    <button class="anim-btn on" id="vidExportFolder" title="Pick a folder up front, frames are written to disk as they're captured">Export range to folder…</button>
+    <button class="anim-btn" id="vidToSheet" title="Capture this range straight into the Sprite Sheet builder — no export/reimport round trip">→ Sprite Sheet builder</button>
+    <button class="anim-btn danger" id="vidPause" style="display:none">⏸ Pause</button>
+    <button class="anim-btn danger" id="vidStop" style="display:none">⏹ Stop</button>
+    <div class="sep"></div>
+    <span id="vidProgress" style="color:var(--dim); font-size:12px"></span>
+  </div>
+</div>
+
+<!-- Sprite Sheet Builder Overlay -->
+<div id="sheetOverlay" class="hide">
+  <button id="sheetClose" title="Close (Esc)">✕</button>
+  <canvas id="sheetPreview"></canvas>
+  <div id="sheetInfo">no frames added</div>
+  <div id="sheetFrameList"></div>
+  <div class="anim-controls">
+    <button class="anim-btn on" id="sheetAddImages">Add images…</button>
+    <button class="anim-btn danger" id="sheetClear">Clear all</button>
+    <span style="color:var(--faint); font-size:11px">drag thumbnails to reorder</span>
+  </div>
+  <div class="anim-controls">
+    <label>Layout
+      <select id="sheetLayout" style="margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit">
+        <option value="grid">Auto grid</option>
+        <option value="grid-cols">Custom columns</option>
+        <option value="row">Horizontal strip</option>
+        <option value="col">Vertical strip</option>
+      </select>
+    </label>
+    <label id="sheetColsRow" style="display:none">Cols <input type="number" id="sheetCols" min="1" value="4" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <div class="sep"></div>
+    <label>Spacing <input type="number" id="sheetSpacing" min="0" value="0" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <label>Padding <input type="number" id="sheetPadding" min="0" value="0" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+  </div>
+  <div class="anim-controls">
+    <label class="check"><input type="checkbox" id="sheetTrim"> Trim transparent edges per frame</label>
+    <label class="check"><input type="checkbox" id="sheetPot"> Round canvas up to power-of-two</label>
+    <label class="check"><input type="checkbox" id="sheetLabels"> Bake frame index labels into image (debug only)</label>
+    <div class="sep"></div>
+    <label>Background
+      <select id="sheetBg" style="margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit">
+        <option value="transparent">Transparent</option>
+        <option value="color">Solid color</option>
+      </select>
+    </label>
+    <input type="color" id="sheetBgColor" value="#ffffff" style="display:none">
+  </div>
+  <div class="anim-controls">
+    <button class="anim-btn on" id="sheetExportPng">Export PNG</button>
+    <button class="anim-btn on" id="sheetExportZip">Export PNG + JSON…</button>
+    <div class="sep"></div>
+    <span id="sheetExportInfo" style="color:var(--dim); font-size:12px"></span>
+  </div>
+</div>
+
 <!-- hidden inputs -->
 <input type="file" id="fileImg" accept="image/*" hidden>
+<input type="file" id="fileVideo" accept="video/*" hidden>
+<input type="file" id="fileSheetImages" accept="image/*" multiple hidden>
 <input type="file" id="fileProj" accept=".json,application/json" hidden>
 
 <!-- Divide dialog -->
@@ -3150,6 +3304,606 @@ window.addEventListener("keydown",e=>{
     if(typing||document.querySelector("dialog[open]")) return;
     if($("animOverlay").classList.contains("hide")) openPreview(); else closePreview();
   }
+});
+
+/* ============================== video frame exporter ============================== */
+const VID = { name:"video", fps:30, start:0, end:0, duration:0, playing:false };
+const vidEl = $("vidEl");
+
+function fmtTime(t){
+  t = Math.max(0,t||0);
+  const m = Math.floor(t/60), s = t-m*60;
+  return `${String(m).padStart(2,"0")}:${s.toFixed(3).padStart(6,"0")}`;
+}
+function parseTime(str){
+  const m = /^(\d+):(\d+(?:\.\d+)?)$/.exec((str||"").trim());
+  if(!m) return NaN;
+  return (+m[1])*60 + (+m[2]);
+}
+
+$("btnOpenVideo").addEventListener("click",()=>{
+  localStorage.setItem("ts_seenVideoTool","1");
+  $("btnOpenVideo").classList.remove("hint");
+  $("fileVideo").click();
+});
+// Nudge first-time users toward the video tool once, the same way we do
+// for animation preview — it doesn't depend on any project state, so it
+// can fire as soon as the app loads rather than waiting on a slice count.
+if(!localStorage.getItem("ts_seenVideoTool")){
+  setTimeout(()=>$("btnOpenVideo").classList.add("hint"), 600);
+}
+$("fileVideo").addEventListener("change", e=>{
+  const f = e.target.files[0];
+  e.target.value = "";
+  if(f) openVideoFile(f);
+});
+
+function openVideoFile(file){
+  VID.name = (file.name||"video").replace(/\.[^.]+$/,"");
+  const url = URL.createObjectURL(file);
+  vidEl.src = url;
+  vidEl.addEventListener("loadedmetadata", async ()=>{
+    let dur = vidEl.duration;
+    // Some containers report duration as NaN (not ready yet) or Infinity
+    // (unknown, common for certain mp4/webm muxing) right at loadedmetadata.
+    // The standard recovery is to force a seek near the end and read back
+    // the corrected value once the browser has actually resolved it.
+    if(!isFinite(dur) || dur<=0){
+      dur = await recoverVideoDuration();
+    }
+    VID.duration = isFinite(dur) && dur>0 ? dur : 0;
+    VID.start = 0; VID.end = VID.duration;
+    $("vidScrub").max = "1000";
+    $("vidScrub").value = "0";
+    $("vidStartTxt").value = fmtTime(VID.start);
+    $("vidEndTxt").value = fmtTime(VID.end);
+    $("vidTimeDur").textContent = fmtTime(VID.duration);
+    if(VID.duration>0){
+      $("vidInfo").textContent = `${VID.name} — ${vidEl.videoWidth}×${vidEl.videoHeight} — ${fmtTime(VID.duration)}`;
+    } else {
+      $("vidInfo").textContent = `${VID.name} — ${vidEl.videoWidth}×${vidEl.videoHeight} — duration unknown; scrub or step to explore it, range export needs a real end time`;
+    }
+    updateVidUI();
+    updateRangeCount();
+    $("videoOverlay").classList.remove("hide");
+  }, {once:true});
+}
+
+// Forces the browser to resolve a real duration for files that report
+// NaN/Infinity at loadedmetadata. Seeks near the end, waits for the
+// engine to correct itself, then returns to the start.
+function recoverVideoDuration(){
+  return new Promise(res=>{
+    const onChange = ()=>{
+      if(isFinite(vidEl.duration) && vidEl.duration>0){
+        vidEl.removeEventListener("durationchange", onChange);
+        vidEl.currentTime = 0;
+        res(vidEl.duration);
+      }
+    };
+    vidEl.addEventListener("durationchange", onChange);
+    // Timeout fallback so we never hang the load if it truly can't resolve.
+    setTimeout(()=>{ vidEl.removeEventListener("durationchange", onChange); res(vidEl.duration); }, 2000);
+    try{ vidEl.currentTime = 1e7; }catch(e){}
+  });
+}
+
+function seekTo(t){
+  return new Promise(res=>{
+    const clamped = Math.min(Math.max(t,0), VID.duration||0);
+    const done = ()=>{ vidEl.removeEventListener("seeked",done); res(); };
+    vidEl.addEventListener("seeked", done);
+    vidEl.currentTime = clamped;
+  });
+}
+function updateVidUI(){
+  const cur = vidEl.currentTime||0;
+  $("vidTimeCur").textContent = fmtTime(cur);
+  if(VID.duration>0) $("vidScrub").value = String(Math.round((cur/VID.duration)*1000));
+  const fps = Math.max(1, +$("vidFps").value||30);
+  const frameNo = Math.round(cur*fps)+1;
+  const totalFrames = Math.round(VID.duration*fps)+1;
+  $("vidInfo").textContent = `${VID.name} — ${vidEl.videoWidth}×${vidEl.videoHeight} — frame ${frameNo} / ${totalFrames} (@ ${fps}fps)`;
+}
+async function stepFrame(dir){
+  vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play";
+  const fps = Math.max(1, +$("vidFps").value||30);
+  await seekTo((vidEl.currentTime||0) + dir/fps);
+  updateVidUI();
+}
+
+$("vidPrev").addEventListener("click",()=>stepFrame(-1));
+$("vidNext").addEventListener("click",()=>stepFrame(1));
+$("vidPlayPause").addEventListener("click",()=>{
+  if(VID.playing){ vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play"; }
+  else { vidEl.play(); VID.playing=true; $("vidPlayPause").textContent="⏸ Pause"; }
+});
+vidEl.addEventListener("timeupdate", updateVidUI);
+vidEl.addEventListener("ended", ()=>{ VID.playing=false; $("vidPlayPause").textContent="▶ Play"; });
+vidEl.addEventListener("pause", ()=>{ VID.playing=false; $("vidPlayPause").textContent="▶ Play"; });
+// Belt-and-suspenders: if a corrected duration shows up later (some files
+// resolve it lazily), pick it up as long as the user hasn't already set a
+// custom range, so Export Range never stays stuck disabled indefinitely.
+vidEl.addEventListener("durationchange", ()=>{
+  const dur = vidEl.duration;
+  if(isFinite(dur) && dur>0 && dur!==VID.duration){
+    const wasFullRange = (VID.start===0 && VID.end===VID.duration);
+    VID.duration = dur;
+    if(wasFullRange) VID.end = dur;
+    $("vidTimeDur").textContent = fmtTime(VID.duration);
+    if(wasFullRange) $("vidEndTxt").value = fmtTime(VID.end);
+    updateRangeCount();
+  }
+});
+
+$("vidScrub").addEventListener("input", async ()=>{
+  if(!VID.duration) return;
+  vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play";
+  const t = (+$("vidScrub").value/1000)*VID.duration;
+  await seekTo(t);
+  updateVidUI();
+});
+$("vidFps").addEventListener("change", ()=>{ updateVidUI(); updateRangeCount(); });
+
+function updateRangeCount(){
+  const fps = Math.max(1, +$("vidFps").value||30);
+  if(!(VID.duration>0)){
+    $("vidRangeCount").textContent = "duration not detected yet — try scrubbing to the end of the video, or step through with ⏭";
+    if(!VIDEXPORT.running){ $("vidExportRange").disabled = true; $("vidExportFolder").disabled = true; $("vidToSheet").disabled = true; }
+    return;
+  }
+  const n = Math.max(0, Math.round((VID.end-VID.start)*fps)+1);
+  $("vidRangeCount").textContent = (VID.end>VID.start)
+    ? `${fmtTime(VID.start)} → ${fmtTime(VID.end)}  ·  ~${n} frames at ${fps}fps`
+    : "set an end time after the start time";
+  if(!VIDEXPORT.running){
+    $("vidExportRange").disabled = !(VID.end>VID.start);
+    $("vidExportFolder").disabled = !(VID.end>VID.start);
+    $("vidToSheet").disabled = !(VID.end>VID.start);
+  }
+}
+$("vidSetStart").addEventListener("click",()=>{
+  VID.start = vidEl.currentTime||0;
+  $("vidStartTxt").value = fmtTime(VID.start);
+  updateRangeCount();
+});
+$("vidSetEnd").addEventListener("click",()=>{
+  VID.end = vidEl.currentTime||0;
+  $("vidEndTxt").value = fmtTime(VID.end);
+  updateRangeCount();
+});
+$("vidFullRange").addEventListener("click",()=>{
+  VID.start=0; VID.end=VID.duration;
+  $("vidStartTxt").value = fmtTime(VID.start);
+  $("vidEndTxt").value = fmtTime(VID.end);
+  updateRangeCount();
+});
+$("vidStartTxt").addEventListener("change",()=>{
+  const t=parseTime($("vidStartTxt").value);
+  if(!isNaN(t)){ VID.start=Math.max(0,Math.min(t,VID.duration)); }
+  $("vidStartTxt").value = fmtTime(VID.start);
+  updateRangeCount();
+});
+$("vidEndTxt").addEventListener("change",()=>{
+  const t=parseTime($("vidEndTxt").value);
+  if(!isNaN(t)){ VID.end=Math.max(0,Math.min(t,VID.duration)); }
+  $("vidEndTxt").value = fmtTime(VID.end);
+  updateRangeCount();
+});
+
+function captureVideoFrameCanvas(){
+  const c=document.createElement("canvas");
+  c.width=vidEl.videoWidth; c.height=vidEl.videoHeight;
+  c.getContext("2d").drawImage(vidEl,0,0);
+  return c;
+}
+function captureVideoFrameBlob(){
+  return toBlobP(captureVideoFrameCanvas(),"image/png");
+}
+function frameFileName(i){
+  return `${safeName(VID.name)}_frame${String(i).padStart(5,"0")}.png`;
+}
+function blobToB64(blob){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(",")[1]);
+    r.onerror=rej;
+    r.readAsDataURL(blob);
+  });
+}
+
+$("vidExportFrame").addEventListener("click", async ()=>{
+  vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play";
+  const fps = Math.max(1, +$("vidFps").value||30);
+  const idx = Math.round((vidEl.currentTime||0)*fps)+1;
+  const blob = await captureVideoFrameBlob();
+  await dlOrPicker(blob, frameFileName(idx), [{description:"PNG image", accept:{"image/png":[".png"]}}]);
+});
+
+/* ---------- shared pause/stop control for range exports ---------- */
+const VIDEXPORT = { running:false, paused:false, abort:false };
+
+function setVidExportRunning(running){
+  VIDEXPORT.running = running;
+  VIDEXPORT.paused = false; VIDEXPORT.abort = false;
+  $("vidPause").style.display = running ? "" : "none";
+  $("vidStop").style.display = running ? "" : "none";
+  $("vidPause").textContent = "⏸ Pause";
+  $("vidExportFrame").disabled = running;
+  $("vidExportRange").disabled = running || !(VID.end>VID.start);
+  $("vidExportFolder").disabled = running || !(VID.end>VID.start);
+  $("vidToSheet").disabled = running || !(VID.end>VID.start);
+}
+$("vidPause").addEventListener("click",()=>{
+  VIDEXPORT.paused = !VIDEXPORT.paused;
+  $("vidPause").textContent = VIDEXPORT.paused ? "▶ Resume" : "⏸ Pause";
+});
+$("vidStop").addEventListener("click",()=>{ VIDEXPORT.abort = true; });
+
+// Waits out a pause, and reports whether the export should stop entirely.
+async function vidExportCheckpoint(){
+  while(VIDEXPORT.paused && !VIDEXPORT.abort) await sleep(150);
+  return VIDEXPORT.abort;
+}
+
+function computeRangeTotal(){
+  const fps = Math.max(1, +$("vidFps").value||30);
+  const total = Math.round((VID.end-VID.start)*fps)+1;
+  return {fps, total};
+}
+
+$("vidExportRange").addEventListener("click", async ()=>{
+  if(!(VID.end>VID.start)){
+    $("vidProgress").textContent = "No valid range set — check the start/end times above.";
+    return;
+  }
+  vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play";
+  const {fps, total} = computeRangeTotal();
+  if(!Number.isFinite(total) || total<1){
+    $("vidProgress").textContent = "Couldn't compute a frame count for this range — try re-setting start/end.";
+    return;
+  }
+  if(total>1500 && !confirm(`This will export ${total} frames, which can take a while and produce a large file. Continue?`)) return;
+  if(typeof JSZip==="undefined"){ $("vidProgress").textContent = "ZIP export needs JSZip, which isn't loaded."; return; }
+
+  setVidExportRunning(true);
+  const zip = new JSZip();
+  const dir = safeName(VID.name)+"_frames/";
+  let done = 0;
+  for(let i=0;i<total;i++){
+    if(await vidExportCheckpoint()) break;
+    const t = Math.min(VID.start + i/fps, VID.end);
+    await seekTo(t);
+    const blob = await captureVideoFrameBlob();
+    zip.file(dir+frameFileName(i+1), blob);
+    done++;
+    $("vidProgress").textContent = `Exporting frame ${done} / ${total}…`;
+  }
+  const stopped = done<total;
+  $("vidProgress").textContent = stopped ? `Stopped — zipping ${done} of ${total} frames…` : `Zipping ${total} frames…`;
+  const out = await zip.generateAsync({type:"blob"});
+  await dlOrPicker(out, safeName(VID.name)+(stopped?`-frames-partial-${done}`:"-frames")+".zip",
+    [{description:"ZIP archive", accept:{"application/zip":[".zip"]}}]);
+  $("vidProgress").textContent = stopped
+    ? `Stopped early — exported ${done} of ${total} frames.`
+    : `Done — exported ${total} frames.`;
+  setVidExportRunning(false);
+});
+
+$("vidExportFolder").addEventListener("click", async ()=>{
+  if(!(VID.end>VID.start)){
+    $("vidProgress").textContent = "No valid range set — check the start/end times above.";
+    return;
+  }
+  if(!window.teqAPI && !FOLDER_OK){
+    $("vidProgress").textContent = "This browser can't pick a folder — use Export range as ZIP instead.";
+    return;
+  }
+  vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play";
+  const {fps, total} = computeRangeTotal();
+  if(!Number.isFinite(total) || total<1){
+    $("vidProgress").textContent = "Couldn't compute a frame count for this range — try re-setting start/end.";
+    return;
+  }
+  if(total>1500 && !confirm(`This will export ${total} frames, which can take a while. Continue?`)) return;
+
+  const subfolder = safeName(VID.name)+"_frames";
+  let electronFolder=null, dirHandle=null;
+  if(window.teqAPI){
+    electronFolder = await window.teqAPI.openFolder();
+    if(!electronFolder){ return; } // user cancelled the picker
+  } else {
+    try{
+      const root = await showDirectoryPicker();
+      dirHandle = await root.getDirectoryHandle(subfolder,{create:true});
+    }catch(e){ if(e && e.name==="AbortError") return; $("vidProgress").textContent="Couldn't open that folder."; return; }
+  }
+
+  setVidExportRunning(true);
+  let done = 0;
+  for(let i=0;i<total;i++){
+    if(await vidExportCheckpoint()) break;
+    const t = Math.min(VID.start + i/fps, VID.end);
+    await seekTo(t);
+    const blob = await captureVideoFrameBlob();
+    const fn = frameFileName(i+1);
+    if(electronFolder){
+      const b64 = await blobToB64(blob);
+      await window.teqAPI.writeFile({filePath:`${electronFolder}\\${subfolder}\\${fn}`, dataBase64:b64});
+    } else {
+      await writeToDir(dirHandle, fn, blob);
+    }
+    done++;
+    $("vidProgress").textContent = `Writing frame ${done} / ${total}…`;
+  }
+  const stopped = done<total;
+  $("vidProgress").textContent = stopped
+    ? `Stopped early — wrote ${done} of ${total} frames to disk.`
+    : `Done — wrote ${total} frames to disk.`;
+  if(electronFolder && window.teqAPI.showInFolder) window.teqAPI.showInFolder({filePath:`${electronFolder}\\${subfolder}`});
+  setVidExportRunning(false);
+});
+
+function closeVideoOverlay(){
+  vidEl.pause(); VID.playing=false;
+  $("videoOverlay").classList.add("hide");
+}
+$("vidClose").addEventListener("click",closeVideoOverlay);
+$("videoOverlay").addEventListener("keydown", e=>{
+  if(e.code==="Space" && document.activeElement!==$("vidStartTxt") && document.activeElement!==$("vidEndTxt")){
+    e.preventDefault();
+    $("vidPlayPause").click();
+  }
+  if(e.key==="Escape") closeVideoOverlay();
+},true);
+
+/* ============================== sprite sheet builder ============================== */
+const SHEET = { frames: [] }; // [{id, name, canvas, w, h}]
+let sheetIdSeq = 1;
+const sheetCv = $("sheetPreview"), sheetCtx = sheetCv.getContext("2d");
+
+function nextPOT(n){ let p=1; while(p<n) p*=2; return p; }
+
+// Pure layout math — tested in isolation before this went anywhere near
+// the renderer. Only supports uniform cell sizing (cells sized to the
+// largest frame); true non-uniform bin-packing is a different algorithm
+// and out of scope here.
+function planSheetLayout(frameSizes, opts){
+  const n = frameSizes.length;
+  if(n===0) return null;
+  const spacing = opts.spacing||0, padding = opts.padding||0;
+
+  let cols, rows;
+  if(opts.layout==="row"){ cols=n; rows=1; }
+  else if(opts.layout==="col"){ cols=1; rows=n; }
+  else if(opts.layout==="grid-cols" && opts.cols){ cols=Math.max(1,opts.cols); rows=Math.ceil(n/cols); }
+  else { cols=Math.ceil(Math.sqrt(n)); rows=Math.ceil(n/cols); }
+
+  const cellW = Math.max(...frameSizes.map(f=>f.w));
+  const cellH = Math.max(...frameSizes.map(f=>f.h));
+
+  let canvasW = padding*2 + cols*cellW + (cols-1)*spacing;
+  let canvasH = padding*2 + rows*cellH + (rows-1)*spacing;
+  if(opts.pot){ canvasW = nextPOT(canvasW); canvasH = nextPOT(canvasH); }
+
+  const positions = frameSizes.map((f,i)=>{
+    const col = i%cols, row = Math.floor(i/cols);
+    const cellX = padding + col*(cellW+spacing);
+    const cellY = padding + row*(cellH+spacing);
+    const x = cellX + Math.floor((cellW-f.w)/2);
+    const y = cellY + Math.floor((cellH-f.h)/2);
+    return {x,y,w:f.w,h:f.h,col,row};
+  });
+
+  return {cols, rows, cellW, cellH, canvasW, canvasH, positions};
+}
+
+// Crops a canvas to the bounding box of its non-transparent pixels.
+// Returns the original canvas untouched if nothing is above the threshold
+// (a fully opaque frame, or a fully empty one) — trimming only helps when
+// the source frame actually has real alpha around the subject.
+function trimCanvasAlpha(canvas, alphaThreshold=0){
+  const w=canvas.width, h=canvas.height;
+  const ctx=canvas.getContext("2d");
+  const data=ctx.getImageData(0,0,w,h).data;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(data[(y*w+x)*4+3]>alphaThreshold){
+      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+    }
+  }
+  if(!isFinite(minX) || (minX===0 && minY===0 && maxX===w-1 && maxY===h-1)) return canvas;
+  const tw=maxX-minX+1, th=maxY-minY+1;
+  const out=document.createElement("canvas");
+  out.width=tw; out.height=th;
+  out.getContext("2d").drawImage(canvas, minX,minY,tw,th, 0,0,tw,th);
+  return out;
+}
+
+function sheetOpts(){
+  return {
+    layout: $("sheetLayout").value,
+    cols: +$("sheetCols").value||4,
+    spacing: Math.max(0,+$("sheetSpacing").value||0),
+    padding: Math.max(0,+$("sheetPadding").value||0),
+    pot: $("sheetPot").checked,
+    trim: $("sheetTrim").checked,
+    labels: $("sheetLabels").checked,
+    bg: $("sheetBg").value,
+    bgColor: $("sheetBgColor").value
+  };
+}
+
+function sheetAddFrame(name, canvas){
+  SHEET.frames.push({id:sheetIdSeq++, name, canvas, w:canvas.width, h:canvas.height});
+}
+
+function sheetRebuild(){
+  const opts = sheetOpts();
+  sheetRefreshFrameList();
+  if(!SHEET.frames.length){
+    sheetCv.width=1; sheetCv.height=1;
+    sheetCtx.clearRect(0,0,1,1);
+    $("sheetInfo").textContent = "no frames added";
+    $("sheetExportPng").disabled = true; $("sheetExportZip").disabled = true;
+    return;
+  }
+  const working = opts.trim ? SHEET.frames.map(f=>({...f, canvas:trimCanvasAlpha(f.canvas)})) : SHEET.frames;
+  const sizes = working.map(f=>({w:f.canvas.width, h:f.canvas.height}));
+  const plan = planSheetLayout(sizes, opts);
+
+  sheetCv.width = plan.canvasW; sheetCv.height = plan.canvasH;
+  sheetCtx.imageSmoothingEnabled = false;
+  sheetCtx.clearRect(0,0,plan.canvasW,plan.canvasH);
+  if(opts.bg==="color"){ sheetCtx.fillStyle=opts.bgColor; sheetCtx.fillRect(0,0,plan.canvasW,plan.canvasH); }
+
+  plan.positions.forEach((p,i)=>{
+    sheetCtx.drawImage(working[i].canvas, p.x, p.y);
+    if(opts.labels){
+      sheetCtx.save();
+      sheetCtx.font="10px monospace";
+      sheetCtx.fillStyle="#ff00ff";
+      sheetCtx.fillText(String(i), p.x+2, p.y+p.h-2);
+      sheetCtx.restore();
+    }
+  });
+
+  SHEET._plan = plan; SHEET._working = working; SHEET._opts = opts;
+  $("sheetInfo").textContent = `${SHEET.frames.length} frame${SHEET.frames.length===1?"":"s"} — ${plan.cols}×${plan.rows} grid — ${plan.canvasW}×${plan.canvasH}px`;
+  $("sheetExportPng").disabled = false; $("sheetExportZip").disabled = false;
+}
+
+function sheetRefreshFrameList(){
+  const el = $("sheetFrameList");
+  el.innerHTML = "";
+  SHEET.frames.forEach((f,i)=>{
+    const thumb=document.createElement("div");
+    thumb.className="sheetThumb";
+    thumb.draggable=true;
+    thumb.dataset.idx=i;
+    const c=document.createElement("canvas");
+    const s=Math.min(40/f.w, 40/f.h, 1);
+    c.width=Math.max(1,Math.round(f.w*s)); c.height=Math.max(1,Math.round(f.h*s));
+    const cx=c.getContext("2d"); cx.imageSmoothingEnabled=false; cx.drawImage(f.canvas,0,0,c.width,c.height);
+    const num=document.createElement("span"); num.className="snum"; num.textContent=i;
+    const rm=document.createElement("span"); rm.className="sremove"; rm.textContent="✕";
+    rm.title="Remove frame";
+    rm.addEventListener("click", e=>{ e.stopPropagation(); SHEET.frames.splice(i,1); sheetRebuild(); });
+    thumb.title = `${f.name} — ${f.w}×${f.h}`;
+    thumb.append(c,num,rm);
+
+    thumb.addEventListener("dragstart", e=>{ e.dataTransfer.setData("text/plain", String(i)); });
+    thumb.addEventListener("dragover", e=>{ e.preventDefault(); thumb.classList.add("dragover"); });
+    thumb.addEventListener("dragleave", ()=> thumb.classList.remove("dragover"));
+    thumb.addEventListener("drop", e=>{
+      e.preventDefault(); thumb.classList.remove("dragover");
+      const from = +e.dataTransfer.getData("text/plain");
+      const to = i;
+      if(from===to || isNaN(from)) return;
+      const [moved] = SHEET.frames.splice(from,1);
+      SHEET.frames.splice(to,0,moved);
+      sheetRebuild();
+    });
+    el.appendChild(thumb);
+  });
+}
+
+function openSheetOverlay(){
+  sheetRebuild();
+  $("sheetOverlay").classList.remove("hide");
+}
+function closeSheetOverlay(){
+  $("sheetOverlay").classList.add("hide");
+}
+$("btnSpriteSheet").addEventListener("click", openSheetOverlay);
+$("sheetClose").addEventListener("click", closeSheetOverlay);
+$("sheetOverlay").addEventListener("keydown", e=>{ if(e.key==="Escape") closeSheetOverlay(); }, true);
+
+$("sheetAddImages").addEventListener("click", ()=> $("fileSheetImages").click());
+$("fileSheetImages").addEventListener("change", async e=>{
+  const files=[...e.target.files]; e.target.value="";
+  for(const file of files){
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+    const c=document.createElement("canvas"); c.width=img.naturalWidth; c.height=img.naturalHeight;
+    c.getContext("2d").drawImage(img,0,0);
+    URL.revokeObjectURL(url);
+    sheetAddFrame(file.name.replace(/\.[^.]+$/,""), c);
+  }
+  sheetRebuild();
+});
+$("sheetClear").addEventListener("click", ()=>{ SHEET.frames=[]; sheetRebuild(); });
+
+$("sheetLayout").addEventListener("change", ()=>{
+  $("sheetColsRow").style.display = $("sheetLayout").value==="grid-cols" ? "" : "none";
+  sheetRebuild();
+});
+$("sheetBg").addEventListener("change", ()=>{
+  $("sheetBgColor").style.display = $("sheetBg").value==="color" ? "" : "none";
+  sheetRebuild();
+});
+["sheetCols","sheetSpacing","sheetPadding","sheetPot","sheetTrim","sheetLabels","sheetBgColor"]
+  .forEach(id => $(id).addEventListener("input", sheetRebuild));
+
+$("sheetExportPng").addEventListener("click", async ()=>{
+  if(!SHEET._plan) return;
+  const blob = await toBlobP(sheetCv, "image/png");
+  await dlOrPicker(blob, "spritesheet.png", [{description:"PNG image", accept:{"image/png":[".png"]}}]);
+});
+$("sheetExportZip").addEventListener("click", async ()=>{
+  if(!SHEET._plan) return;
+  const plan = SHEET._plan;
+  const meta = {
+    sheet: {width:plan.canvasW, height:plan.canvasH, cols:plan.cols, rows:plan.rows},
+    frames: SHEET._working.map((f,i)=>({
+      name:f.name, index:i,
+      x:plan.positions[i].x, y:plan.positions[i].y, w:plan.positions[i].w, h:plan.positions[i].h
+    }))
+  };
+  const pngBlob = await toBlobP(sheetCv, "image/png");
+  if(typeof JSZip==="undefined"){
+    await dlOrPicker(pngBlob, "spritesheet.png", [{description:"PNG image", accept:{"image/png":[".png"]}}]);
+    $("sheetExportInfo").textContent = "JSZip unavailable — exported PNG only.";
+    return;
+  }
+  const zip = new JSZip();
+  zip.file("spritesheet.png", pngBlob);
+  zip.file("spritesheet.json", JSON.stringify(meta,null,2));
+  const out = await zip.generateAsync({type:"blob"});
+  await dlOrPicker(out, "spritesheet.zip", [{description:"ZIP archive", accept:{"application/zip":[".zip"]}}]);
+  $("sheetExportInfo").textContent = `Exported ${SHEET.frames.length} frames.`;
+});
+
+/* ---------- bridge: send a video range straight into the builder ---------- */
+$("vidToSheet").addEventListener("click", async ()=>{
+  if(!(VID.end>VID.start)){
+    $("vidProgress").textContent = "No valid range set — check the start/end times above.";
+    return;
+  }
+  vidEl.pause(); VID.playing=false; $("vidPlayPause").textContent="▶ Play";
+  const {fps, total} = computeRangeTotal();
+  if(!Number.isFinite(total) || total<1){
+    $("vidProgress").textContent = "Couldn't compute a frame count for this range — try re-setting start/end.";
+    return;
+  }
+  if(total>500 && !confirm(`This will pull ${total} frames into the Sprite Sheet builder, kept in memory. Continue?`)) return;
+
+  setVidExportRunning(true);
+  let done = 0;
+  for(let i=0;i<total;i++){
+    if(await vidExportCheckpoint()) break;
+    const t = Math.min(VID.start + i/fps, VID.end);
+    await seekTo(t);
+    sheetAddFrame(frameFileName(i+1).replace(/\.png$/,""), captureVideoFrameCanvas());
+    done++;
+    $("vidProgress").textContent = `Capturing frame ${done} / ${total}…`;
+  }
+  const stopped = done<total;
+  $("vidProgress").textContent = stopped
+    ? `Stopped early — sent ${done} of ${total} frames to the Sprite Sheet builder.`
+    : `Sent ${total} frames to the Sprite Sheet builder.`;
+  setVidExportRunning(false);
+  if(done>0) openSheetOverlay();
 });
 
 /* ============================== batch process ============================== */
