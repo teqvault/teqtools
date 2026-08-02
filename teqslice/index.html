@@ -223,10 +223,47 @@ footer .mono{color:var(--ink)}
 }
 #sheetClose:hover{color:var(--ink)}
 #sheetPreview{
+  position:absolute; inset:0;
   image-rendering:pixelated; image-rendering:crisp-edges;
-  border-radius:8px; border:1px solid var(--edge);
-  background:#22242b; max-width:88vw; max-height:44vh;
+  touch-action:none;
 }
+#sheetViewWrap{
+  position:relative; width:min(90vw,900px); height:50vh;
+  border-radius:8px; border:1px solid var(--edge);
+  background:#101116; overflow:hidden;
+}
+.sheetTabs{ position:absolute; top:8px; left:8px; z-index:5; display:flex; gap:4px; }
+.sheetTab{
+  background:rgba(31,33,39,.9); border:1px solid var(--edge); border-radius:7px;
+  padding:4px 10px; font-size:11px; color:var(--dim); cursor:pointer;
+}
+.sheetTab.on{background:var(--accent); color:#06232f; border-color:transparent; font-weight:600}
+#sheetTooltip{
+  position:fixed; z-index:260; pointer-events:none; display:none;
+  background:#1f2127; border:1px solid var(--edge); border-radius:8px;
+  padding:6px 10px; font-size:11px; color:var(--ink); box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+#sheetTooltip b{color:var(--accent)}
+#sheetResultBox .warn{color:#ffcf4c}
+#sheetResultBox .good{color:var(--guide)}
+#sheetSkipOverlay{
+  display:none; position:fixed; inset:0; z-index:260; background:rgba(10,11,14,.85);
+  align-items:center; justify-content:center;
+}
+#sheetSkipOverlay.hide{display:none}
+#sheetSkipOverlay:not(.hide){display:flex}
+#sheetSkipBox{
+  background:var(--panel); border:1px solid #ffcf4c; border-radius:16px;
+  padding:24px 28px; max-width:480px; width:90%;
+}
+#sheetSkipBox .title{font-size:14px; font-weight:600; color:#ffcf4c; margin-bottom:6px}
+#sheetSkipMessage{font-size:12px; color:var(--dim); line-height:1.6; margin-bottom:12px}
+#sheetSkipList{
+  max-height:160px; overflow-y:auto; background:var(--panel2); border:1px solid var(--edge);
+  border-radius:8px; padding:8px 12px; margin-bottom:16px;
+  font-family:ui-monospace,monospace; font-size:11px; color:var(--dim);
+}
+#sheetSkipBox .actions{display:flex; gap:8px; justify-content:flex-end}
 #sheetInfo{color:var(--dim); font-size:12px; font-family:ui-monospace,monospace}
 #sheetFrameList{
   display:flex; gap:4px; overflow-x:auto; max-width:88vw; padding:4px;
@@ -352,6 +389,7 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <button class="btn" id="btnResize">Resize…</button>
   <button class="btn" id="btnCanvas">Canvas…</button>
   <button class="btn" id="btnRemoveBG" disabled>Remove BG…</button>
+  <button class="btn" id="btnAdjust" disabled title="Brightness/Contrast and Hue/Saturation, with a live preview">Adjustments…</button>
   <button class="btn" id="btnGrid">Grid slice…</button>
   <button class="btn" id="btnDetect" disabled title="Smart Slice Detection — auto-find isolated objects">Detect objects…</button>
   <button class="btn" id="btnDivide" disabled>Divide slice…</button>
@@ -631,15 +669,41 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
 <!-- Sprite Sheet Builder Overlay -->
 <div id="sheetOverlay" class="hide">
   <button id="sheetClose" title="Close (Esc)">✕</button>
-  <canvas id="sheetPreview"></canvas>
+  <div id="sheetViewWrap">
+    <div class="sheetTabs" id="sheetTabs"></div>
+    <canvas id="sheetPreview"></canvas>
+  </div>
   <div id="sheetInfo">no frames added</div>
   <div id="sheetFrameList"></div>
   <div class="anim-controls">
     <button class="anim-btn on" id="sheetAddImages">Add images…</button>
+    <button class="anim-btn on" id="sheetAddFolder">Add folder…</button>
     <button class="anim-btn danger" id="sheetClear">Clear all</button>
     <span style="color:var(--faint); font-size:11px">drag thumbnails to reorder</span>
   </div>
+
   <div class="anim-controls">
+    <label><input type="radio" name="sheetMode" id="sheetModeTight" value="tight" checked> Tight pack (bin-packing)</label>
+    <label><input type="radio" name="sheetMode" id="sheetModeGrid" value="grid"> Grid / strip (uniform cells)</label>
+  </div>
+
+  <div class="anim-controls" id="sheetTightControls">
+    <label>Sheet size
+      <select id="sheetSize" style="margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit">
+        <option value="auto">Auto (tight fit)</option>
+        <option value="256">256 × 256</option>
+        <option value="512" selected>512 × 512</option>
+        <option value="1024">1024 × 1024</option>
+        <option value="2048">2048 × 2048</option>
+        <option value="4096">4096 × 4096</option>
+      </select>
+    </label>
+    <label>Padding <input type="number" id="sheetTightPadding" min="0" value="6" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <label>Bleed <input type="number" id="sheetBleed" min="0" value="1" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <span style="color:var(--faint); font-size:11px">bleed extrudes edge pixels outward so texture filtering doesn't bleed between sprites at runtime</span>
+  </div>
+
+  <div class="anim-controls" id="sheetGridControls" style="display:none">
     <label>Layout
       <select id="sheetLayout" style="margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit">
         <option value="grid">Auto grid</option>
@@ -652,11 +716,12 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
     <div class="sep"></div>
     <label>Spacing <input type="number" id="sheetSpacing" min="0" value="0" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
     <label>Padding <input type="number" id="sheetPadding" min="0" value="0" style="width:50px; margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit"></label>
+    <label class="check" style="margin:0 0 0 8px"><input type="checkbox" id="sheetPot"> Round up to power-of-two</label>
   </div>
+
   <div class="anim-controls">
-    <label class="check"><input type="checkbox" id="sheetTrim"> Trim transparent edges per frame</label>
-    <label class="check"><input type="checkbox" id="sheetPot"> Round canvas up to power-of-two</label>
-    <label class="check"><input type="checkbox" id="sheetLabels"> Bake frame index labels into image (debug only)</label>
+    <label class="check" style="margin:0"><input type="checkbox" id="sheetTrim" checked> Trim transparent edges</label>
+    <label class="check" style="margin:0"><input type="checkbox" id="sheetLabels"> Bake frame index labels (debug only)</label>
     <div class="sep"></div>
     <label>Background
       <select id="sheetBg" style="margin-left:4px; background:var(--bg); border:1px solid var(--edge); border-radius:6px; padding:4px 6px; color:var(--ink); font:inherit">
@@ -666,16 +731,34 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
     </label>
     <input type="color" id="sheetBgColor" value="#ffffff" style="display:none">
   </div>
+
+  <div id="sheetResultBox" class="dlgNote" style="display:none"></div>
+
   <div class="anim-controls">
-    <button class="anim-btn on" id="sheetExportPng">Export PNG</button>
-    <button class="anim-btn on" id="sheetExportZip">Export PNG + JSON…</button>
+    <button class="anim-btn on" id="sheetExportFolder">Export → folder…</button>
+    <button class="anim-btn on" id="sheetExportZip">Export → ZIP</button>
+    <label class="check" style="margin:0 0 0 8px"><input type="checkbox" id="sheetIncludeJson" checked> Include atlas.json</label>
     <div class="sep"></div>
     <span id="sheetExportInfo" style="color:var(--dim); font-size:12px"></span>
   </div>
 </div>
 
+<div id="sheetSkipOverlay" class="hide">
+  <div id="sheetSkipBox">
+    <div class="title">⚠ Some sprites didn't fit</div>
+    <div id="sheetSkipMessage"></div>
+    <div id="sheetSkipList"></div>
+    <div class="actions">
+      <button class="btn" id="sheetSkipDismiss">Keep this size — I'll fix it manually</button>
+      <button class="btn primary" id="sheetSkipUseAuto">Switch to Auto &amp; re-pack</button>
+    </div>
+  </div>
+</div>
+<div id="sheetTooltip"></div>
+
 <!-- hidden inputs -->
 <input type="file" id="fileImg" accept="image/*" hidden>
+<input type="file" id="fileSheetFolder" webkitdirectory directory multiple hidden>
 <input type="file" id="fileVideo" accept="video/*" hidden>
 <input type="file" id="fileSheetImages" accept="image/*" multiple hidden>
 <input type="file" id="fileProj" accept=".json,application/json" hidden>
@@ -833,6 +916,46 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <div class="actions">
     <button class="btn" id="rbCancel">Cancel</button>
     <button class="btn primary" id="rbOk">Remove background</button>
+  </div>
+</dialog>
+
+<dialog id="dlgAdjust">
+  <h3>Adjustments</h3>
+  <fieldset>
+    <legend>Apply to</legend>
+    <div class="row"><input type="radio" name="adjScope" id="adjScopeFull" value="full"><label style="min-width:0">Whole image</label></div>
+    <div class="row"><input type="radio" name="adjScope" id="adjScopeSlice" value="slice"><label style="min-width:0" id="adjScopeSliceLabel">Selected slice</label></div>
+  </fieldset>
+  <div class="row" style="margin-top:4px"><b style="font-size:11px; color:var(--dim)">BRIGHTNESS &amp; CONTRAST</b></div>
+  <div class="row"><label style="min-width:90px">Brightness</label>
+    <input type="range" id="adjBrightness" min="-100" max="100" value="0">
+    <span class="mono" id="adjBrightnessVal" style="min-width:32px; color:var(--dim)">0</span>
+  </div>
+  <div class="row"><label style="min-width:90px">Contrast</label>
+    <input type="range" id="adjContrast" min="-100" max="100" value="0">
+    <span class="mono" id="adjContrastVal" style="min-width:32px; color:var(--dim)">0</span>
+  </div>
+  <div class="row" style="margin-top:10px"><b style="font-size:11px; color:var(--dim)">HUE &amp; SATURATION</b></div>
+  <div class="row"><label style="min-width:90px">Hue</label>
+    <input type="range" id="adjHue" min="-180" max="180" value="0">
+    <span class="mono" id="adjHueVal" style="min-width:32px; color:var(--dim)">0</span>
+  </div>
+  <div class="row"><label style="min-width:90px">Saturation</label>
+    <input type="range" id="adjSaturation" min="-100" max="100" value="0">
+    <span class="mono" id="adjSaturationVal" style="min-width:32px; color:var(--dim)">0</span>
+  </div>
+  <div class="row"><label style="min-width:90px">Lightness</label>
+    <input type="range" id="adjLightness" min="-100" max="100" value="0">
+    <span class="mono" id="adjLightnessVal" style="min-width:32px; color:var(--dim)">0</span>
+  </div>
+  <div class="dlgNote">
+    Live preview shows directly on the canvas as you drag. Nothing is
+    committed until you click Apply — Cancel reverts everything below.
+  </div>
+  <div class="actions">
+    <button class="btn" id="adjReset">Reset</button>
+    <button class="btn" id="adjCancel">Cancel</button>
+    <button class="btn primary" id="adjApply">Apply</button>
   </div>
 </dialog>
 
@@ -1812,6 +1935,7 @@ function refreshAll(){
   $("btnSaveTemplate").disabled = !S.slices.length;
   $("btnSaveImage").disabled = !S.img;
   $("btnRemoveBG").disabled = !S.img;
+  $("btnAdjust").disabled = !S.img;
   $("btnDetect").disabled = !S.img;
   maybeHintPreview();
   draw();
@@ -2701,7 +2825,11 @@ const RB = { active:false, baseId:null, srcCanvas:null, previewImg:null, timer:n
              pvScale:1, pvOffX:0, pvOffY:0, zoom:1, panX:0, panY:0, panning:false,
              panStartX:0, panStartY:0, panOrigX:0, panOrigY:0 };
 
-function currentDisplayImage(){ return (RB.active && RB.previewImg) ? RB.previewImg : S.img; }
+function currentDisplayImage(){
+  if(RB.active && RB.previewImg) return RB.previewImg;
+  if(ADJ.active && ADJ.previewImg) return ADJ.previewImg;
+  return S.img;
+}
 
 function rbComputePreview(){
   if(!RB.active || !RB.baseId || !RB.mask) return;
@@ -3641,7 +3769,8 @@ $("vidExportFolder").addEventListener("click", async ()=>{
   $("vidProgress").textContent = stopped
     ? `Stopped early — wrote ${done} of ${total} frames to disk.`
     : `Done — wrote ${total} frames to disk.`;
-  if(electronFolder && window.teqAPI.showInFolder) window.teqAPI.showInFolder({filePath:`${electronFolder}\\${subfolder}`});
+  if(electronFolder && window.teqAPI.showInFolder && window.__getShowFolderAfterExport && window.__getShowFolderAfterExport())
+    window.teqAPI.showInFolder({filePath:`${electronFolder}\\${subfolder}`});
   setVidExportRunning(false);
 });
 
@@ -3659,16 +3788,138 @@ $("videoOverlay").addEventListener("keydown", e=>{
 },true);
 
 /* ============================== sprite sheet builder ============================== */
-const SHEET = { frames: [] }; // [{id, name, canvas, w, h}]
+const SHEET = { frames: [] }; // input queue: [{id, name, canvas, w, h}]
 let sheetIdSeq = 1;
+const PACK = { sheets: [], skipped: [], active: 0 }; // sheets: [{canvas,w,h,placed:[{name,x,y,w,h,trim}]}]
 const sheetCv = $("sheetPreview"), sheetCtx = sheetCv.getContext("2d");
+const sheetViewWrap = $("sheetViewWrap");
+let sheetChecker = null, sheetZoom = 1, sheetOx = 40, sheetOy = 40, sheetPanDrag = null;
 
 function nextPOT(n){ let p=1; while(p<n) p*=2; return p; }
 
-// Pure layout math — tested in isolation before this went anywhere near
-// the renderer. Only supports uniform cell sizing (cells sized to the
-// largest frame); true non-uniform bin-packing is a different algorithm
-// and out of scope here.
+function sheetMakeChecker(){
+  const c=document.createElement("canvas"); c.width=c.height=16;
+  const x=c.getContext("2d");
+  x.fillStyle="#22242b"; x.fillRect(0,0,16,16);
+  x.fillStyle="#191b20"; x.fillRect(0,0,8,8); x.fillRect(8,8,8,8);
+  sheetChecker=sheetCtx.createPattern(c,"repeat");
+}
+function sheetResizeCanvas(){
+  const r=sheetViewWrap.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width)), h=Math.max(1,Math.round(r.height));
+  if(sheetCv.width!==w || sheetCv.height!==h){ sheetCv.width=w; sheetCv.height=h; }
+}
+new ResizeObserver(()=>{ if(!$("sheetOverlay").classList.contains("hide")){ sheetResizeCanvas(); sheetDraw(); } }).observe(sheetViewWrap);
+
+// Crops a canvas to the bounding box of its non-transparent pixels, in
+// TeqPack's {x,y,w,h,empty} shape rather than a cropped canvas — the
+// caller decides what to do with the bounds (packing needs the source
+// rect + offset, not a new canvas).
+function sheetTrimBounds(canvas){
+  const w=canvas.width, h=canvas.height;
+  const data=canvas.getContext("2d").getImageData(0,0,w,h).data;
+  let minX=w,minY=h,maxX=-1,maxY=-1;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const a=data[(y*w+x)*4+3];
+    if(a>0){ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; }
+  }
+  if(maxX<0) return {x:0,y:0,w,h,empty:true};
+  return {x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1,empty:false};
+}
+
+/* ---------- tight-pack: shelf packing, first-fit by descending height ---------- */
+/* Ported from TeqPack — tested in isolation (no overlaps, correct overflow
+   to additional sheets, oversized items skipped rather than crashing)
+   before being wired in here. */
+function packShelves(items, maxW, maxH, padding){
+  const sorted=[...items].sort((a,b)=> b.h-a.h);
+  const sheets=[];
+  let sheet={ items:[] };
+  let shelfY=padding, shelfH=0, cursorX=padding;
+  function commitSheet(){ if(sheet.items.length) sheets.push(sheet); sheet={items:[]}; shelfY=padding; shelfH=0; cursorX=padding; }
+  const skipped=[];
+  for(const it of sorted){
+    if(it.w>maxW-padding*2 || it.h>maxH-padding*2){ skipped.push(it); continue; }
+    if(cursorX+it.w > maxW-padding){ shelfY += shelfH+padding; shelfH=0; cursorX=padding; }
+    if(shelfY+it.h > maxH-padding){ commitSheet(); }
+    sheet.items.push({ ...it, x:cursorX, y:shelfY });
+    cursorX += it.w+padding;
+    shelfH = Math.max(shelfH, it.h);
+  }
+  if(sheet.items.length) sheets.push(sheet);
+  for(const s of sheets){
+    let mx=0,my=0;
+    for(const it of s.items){ mx=Math.max(mx,it.x+it.w); my=Math.max(my,it.y+it.h); }
+    s.usedW=mx+padding; s.usedH=my+padding;
+  }
+  return {sheets, skipped};
+}
+
+async function packTight(){
+  const padding=+$("sheetTightPadding").value||0, bleed=+$("sheetBleed").value||0;
+  const trimOn=$("sheetTrim").checked;
+  const mode=$("sheetSize").value;
+
+  const packItems=[];
+  let anyRealTrim=false, checkedTrim=0;
+  for(const it of SHEET.frames){
+    let sx=0, sy=0, sw=it.w, sh=it.h, trim=null;
+    if(trimOn){
+      const b=sheetTrimBounds(it.canvas);
+      checkedTrim++;
+      if(!b.empty){
+        sx=b.x; sy=b.y; sw=b.w; sh=b.h; trim={x:b.x,y:b.y,sourceWidth:it.w,sourceHeight:it.h};
+        if(!(b.x===0 && b.y===0 && b.w===it.w && b.h===it.h)) anyRealTrim=true;
+      }
+    }
+    packItems.push({ id:it.id, name:it.name, img:it.canvas, sx,sy,sw,sh, w:sw+bleed*2, h:sh+bleed*2, trim });
+  }
+  const opaqueWarning = (trimOn && checkedTrim>0 && !anyRealTrim);
+
+  let maxW,maxH;
+  if(mode==="auto"){
+    let totalArea=0; for(const p of packItems) totalArea += p.w*p.h;
+    maxW = Math.max(64, Math.ceil(Math.sqrt(totalArea*1.3)));
+    maxH = 16384;
+  } else {
+    maxW=maxH=+mode;
+  }
+
+  const {sheets, skipped} = packShelves(packItems, maxW, maxH, padding);
+
+  const outSheets=[];
+  for(const s of sheets){
+    const w = mode==="auto" ? s.usedW : maxW;
+    const h = mode==="auto" ? s.usedH : maxH;
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    const cctx=c.getContext("2d");
+    if($("sheetBg").value==="color"){ cctx.fillStyle=$("sheetBgColor").value; cctx.fillRect(0,0,w,h); }
+    const placed=[];
+    for(const it of s.items){
+      const dx=it.x+bleed, dy=it.y+bleed;
+      cctx.drawImage(it.img, it.sx,it.sy,it.sw,it.sh, dx,dy,it.sw,it.sh);
+      if(bleed>0){
+        cctx.drawImage(it.img, it.sx,it.sy,it.sw,1, dx,dy-bleed,it.sw,bleed);
+        cctx.drawImage(it.img, it.sx,it.sy+it.sh-1,it.sw,1, dx,dy+it.sh,it.sw,bleed);
+        cctx.drawImage(it.img, it.sx,it.sy,1,it.sh, dx-bleed,dy,bleed,it.sh);
+        cctx.drawImage(it.img, it.sx+it.sw-1,it.sy,1,it.sh, dx+it.sw,dy,bleed,it.sh);
+      }
+      if($("sheetLabels").checked){
+        cctx.save(); cctx.font="10px monospace"; cctx.fillStyle="#ff00ff";
+        cctx.fillText(String(placed.length), dx+2, dy+it.sh-2);
+        cctx.restore();
+      }
+      placed.push({ name:it.name, x:dx, y:dy, w:it.sw, h:it.sh, trim:it.trim });
+    }
+    outSheets.push({ canvas:c, w, h, placed });
+  }
+  return { sheets: outSheets, skipped, opaqueWarning };
+}
+
+/* ---------- grid/strip: uniform cell layout ---------- */
+/* Pure layout math — tested in isolation. Only supports uniform cell
+   sizing (cells sized to the largest frame); that's the whole point of
+   this mode (predictable index-based lookup), unlike tight-pack. */
 function planSheetLayout(frameSizes, opts){
   const n = frameSizes.length;
   if(n===0) return null;
@@ -3699,81 +3950,198 @@ function planSheetLayout(frameSizes, opts){
   return {cols, rows, cellW, cellH, canvasW, canvasH, positions};
 }
 
-// Crops a canvas to the bounding box of its non-transparent pixels.
-// Returns the original canvas untouched if nothing is above the threshold
-// (a fully opaque frame, or a fully empty one) — trimming only helps when
-// the source frame actually has real alpha around the subject.
-function trimCanvasAlpha(canvas, alphaThreshold=0){
-  const w=canvas.width, h=canvas.height;
-  const ctx=canvas.getContext("2d");
-  const data=ctx.getImageData(0,0,w,h).data;
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
-    if(data[(y*w+x)*4+3]>alphaThreshold){
-      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
-    }
-  }
-  if(!isFinite(minX) || (minX===0 && minY===0 && maxX===w-1 && maxY===h-1)) return canvas;
-  const tw=maxX-minX+1, th=maxY-minY+1;
-  const out=document.createElement("canvas");
-  out.width=tw; out.height=th;
-  out.getContext("2d").drawImage(canvas, minX,minY,tw,th, 0,0,tw,th);
-  return out;
-}
-
-function sheetOpts(){
-  return {
+async function packGrid(){
+  const opts = {
     layout: $("sheetLayout").value,
     cols: +$("sheetCols").value||4,
     spacing: Math.max(0,+$("sheetSpacing").value||0),
     padding: Math.max(0,+$("sheetPadding").value||0),
-    pot: $("sheetPot").checked,
-    trim: $("sheetTrim").checked,
-    labels: $("sheetLabels").checked,
-    bg: $("sheetBg").value,
-    bgColor: $("sheetBgColor").value
+    pot: $("sheetPot").checked
   };
+  const trimOn = $("sheetTrim").checked;
+
+  let anyRealTrim=false, checkedTrim=0;
+  const working = SHEET.frames.map(f=>{
+    if(!trimOn) return {...f, trim:null};
+    const b=sheetTrimBounds(f.canvas);
+    checkedTrim++;
+    if(b.empty) return {...f, trim:null};
+    if(!(b.x===0 && b.y===0 && b.w===f.canvas.width && b.h===f.canvas.height)) anyRealTrim=true;
+    const c=document.createElement("canvas"); c.width=b.w; c.height=b.h;
+    c.getContext("2d").drawImage(f.canvas, b.x,b.y,b.w,b.h, 0,0,b.w,b.h);
+    return {...f, canvas:c, w:b.w, h:b.h, trim:{x:b.x,y:b.y,sourceWidth:f.w,sourceHeight:f.h}};
+  });
+  const opaqueWarning = (trimOn && checkedTrim>0 && !anyRealTrim);
+
+  const sizes = working.map(f=>({w:f.canvas.width, h:f.canvas.height}));
+  const plan = planSheetLayout(sizes, opts);
+  const c=document.createElement("canvas"); c.width=plan.canvasW; c.height=plan.canvasH;
+  const ctx=c.getContext("2d");
+  ctx.imageSmoothingEnabled=false;
+  if($("sheetBg").value==="color"){ ctx.fillStyle=$("sheetBgColor").value; ctx.fillRect(0,0,plan.canvasW,plan.canvasH); }
+
+  const placed=[];
+  plan.positions.forEach((p,i)=>{
+    ctx.drawImage(working[i].canvas, p.x, p.y);
+    if($("sheetLabels").checked){
+      ctx.save(); ctx.font="10px monospace"; ctx.fillStyle="#ff00ff";
+      ctx.fillText(String(i), p.x+2, p.y+p.h-2);
+      ctx.restore();
+    }
+    placed.push({ name:working[i].name, x:p.x, y:p.y, w:p.w, h:p.h, trim:working[i].trim });
+  });
+
+  return { sheets:[{canvas:c, w:plan.canvasW, h:plan.canvasH, placed}], skipped:[], opaqueWarning };
 }
 
+/* ---------- shared pack/preview/export pipeline ---------- */
+function sheetCurrentMode(){ return $("sheetModeTight").checked ? "tight" : "grid"; }
+
+async function sheetRepack(){
+  sheetRefreshFrameList();
+  if(!SHEET.frames.length){
+    PACK.sheets=[]; PACK.skipped=[]; PACK.active=0;
+    $("sheetInfo").textContent = "no frames added";
+    $("sheetResultBox").style.display="none";
+    $("sheetExportFolder").disabled = true; $("sheetExportZip").disabled = true;
+    sheetRefreshTabs(); sheetDraw();
+    return;
+  }
+  const result = sheetCurrentMode()==="tight" ? await packTight() : await packGrid();
+  PACK.sheets = result.sheets;
+  PACK.skipped = result.skipped;
+  PACK.opaqueWarning = result.opaqueWarning;
+  if(PACK.active >= PACK.sheets.length) PACK.active = 0;
+
+  $("sheetInfo").textContent = `${SHEET.frames.length} sprite${SHEET.frames.length===1?"":"s"} — ${PACK.sheets.length} sheet${PACK.sheets.length===1?"":"s"}`;
+  sheetRefreshResultBox();
+  sheetRefreshTabs();
+  $("sheetExportFolder").disabled = !PACK.sheets.length;
+  $("sheetExportZip").disabled = !PACK.sheets.length;
+  sheetFitView();
+  sheetDraw();
+
+  if(PACK.skipped.length) sheetShowSkipNotice(PACK.skipped, $("sheetSize").value);
+}
+let sheetRepackTimer=null;
+function sheetScheduleRepack(){
+  clearTimeout(sheetRepackTimer);
+  sheetRepackTimer=setTimeout(sheetRepack, 250);
+}
+
+function sheetRefreshResultBox(){
+  const box=$("sheetResultBox");
+  if(!PACK.sheets.length){ box.style.display="none"; return; }
+  box.style.display="block";
+  let totalSpriteArea=0, totalSheetArea=0;
+  for(const s of PACK.sheets){
+    totalSheetArea += s.w*s.h;
+    for(const p of s.placed) totalSpriteArea += p.w*p.h;
+  }
+  const util = (totalSpriteArea/totalSheetArea*100).toFixed(1);
+  const utilClass = util>70 ? "good" : util>45 ? "" : "warn";
+  const warning = PACK.opaqueWarning ? `
+    <div class="warn" style="margin-top:6px; padding-top:6px; border-top:1px solid var(--edge)">
+      ⚠ These sprites have no transparent edges — trim had nothing to crop.
+      Increase padding for breathing room; bleed won't help here since
+      there's no alpha edge for it to protect.
+    </div>` : "";
+  box.innerHTML = `
+    ${PACK.sheets.map((s,i)=>`<div class="mono">Sheet ${i+1}: ${s.w}×${s.h} — ${s.placed.length} sprites</div>`).join("")}
+    <div class="${utilClass}">Utilization: ${util}%</div>
+    ${warning}
+  `;
+}
+function sheetRefreshTabs(){
+  const el=$("sheetTabs"); el.innerHTML="";
+  if(PACK.sheets.length<=1) return;
+  PACK.sheets.forEach((s,i)=>{
+    const b=document.createElement("button"); b.className="sheetTab"+(i===PACK.active?" on":"");
+    b.textContent=`Sheet ${i+1}`;
+    b.addEventListener("click",()=>{ PACK.active=i; sheetRefreshTabs(); sheetFitView(); sheetDraw(); });
+    el.appendChild(b);
+  });
+}
+function sheetShowSkipNotice(skipped, mode){
+  const modeLabel = mode==="auto" ? "Auto (tight fit)" : `${mode}×${mode}`;
+  let maxSpriteW=0, maxSpriteH=0;
+  for(const s of skipped){ maxSpriteW=Math.max(maxSpriteW,s.w); maxSpriteH=Math.max(maxSpriteH,s.h); }
+  $("sheetSkipMessage").innerHTML = mode==="auto"
+    ? `${skipped.length} sprite${skipped.length>1?"s":""} couldn't be placed even in Auto mode — that shouldn't normally happen. The largest skipped sprite is <b>${maxSpriteW}×${maxSpriteH}</b>.`
+    : `${skipped.length} sprite${skipped.length>1?"s":""} didn't fit on a <b>${modeLabel}</b> sheet — the largest one is <b>${maxSpriteW}×${maxSpriteH}</b>, bigger than the sheet itself. Auto (tight fit) sizes the sheet to whatever you load, so nothing gets skipped.`;
+  $("sheetSkipList").innerHTML = skipped.map(s=>`${s.name} (${s.w}×${s.h})`).join("<br>");
+  $("sheetSkipDismiss").textContent = `Keep ${modeLabel} — I'll fix it manually`;
+  $("sheetSkipUseAuto").style.display = mode==="auto" ? "none" : "inline-flex";
+  $("sheetSkipOverlay").classList.remove("hide");
+}
+$("sheetSkipDismiss").addEventListener("click",()=>{ $("sheetSkipOverlay").classList.add("hide"); });
+$("sheetSkipUseAuto").addEventListener("click",()=>{
+  $("sheetSkipOverlay").classList.add("hide");
+  $("sheetSize").value="auto";
+  sheetRepack();
+});
+
+/* ---------- interactive preview: pan/zoom, sprite outlines, tooltip ---------- */
+function sheetFitView(){
+  const s=PACK.sheets[PACK.active]; if(!s) return;
+  sheetResizeCanvas();
+  const w=sheetCv.width, h=sheetCv.height;
+  const z=Math.min((w-60)/s.w, (h-60)/s.h, 4);
+  sheetZoom=Math.max(0.05,z);
+  sheetOx=(w-s.w*sheetZoom)/2; sheetOy=(h-s.h*sheetZoom)/2;
+}
+function sheetDraw(){
+  const W=sheetCv.width, H=sheetCv.height;
+  sheetCtx.clearRect(0,0,W,H);
+  const s=PACK.sheets[PACK.active];
+  if(!s) return;
+  sheetCtx.save(); sheetCtx.fillStyle=sheetChecker; sheetCtx.translate(sheetOx,sheetOy); sheetCtx.fillRect(0,0,s.w*sheetZoom,s.h*sheetZoom); sheetCtx.restore();
+  sheetCtx.imageSmoothingEnabled=false;
+  sheetCtx.drawImage(s.canvas, sheetOx, sheetOy, s.w*sheetZoom, s.h*sheetZoom);
+  sheetCtx.strokeStyle="#3a3e49"; sheetCtx.lineWidth=1;
+  sheetCtx.strokeRect(sheetOx-.5,sheetOy-.5,s.w*sheetZoom+1,s.h*sheetZoom+1);
+  sheetCtx.strokeStyle="rgba(69,200,255,.5)"; sheetCtx.lineWidth=1;
+  for(const p of s.placed){
+    const x=Math.round(sheetOx+p.x*sheetZoom)+.5, y=Math.round(sheetOy+p.y*sheetZoom)+.5;
+    sheetCtx.strokeRect(x,y,p.w*sheetZoom,p.h*sheetZoom);
+  }
+}
+sheetCv.addEventListener("pointerdown",e=>{
+  if(!PACK.sheets.length) return;
+  sheetCv.setPointerCapture(e.pointerId);
+  sheetPanDrag={sx:e.offsetX, sy:e.offsetY, ox:sheetOx, oy:sheetOy};
+});
+sheetCv.addEventListener("pointermove",e=>{
+  if(sheetPanDrag){
+    sheetOx=sheetPanDrag.ox+(e.offsetX-sheetPanDrag.sx); sheetOy=sheetPanDrag.oy+(e.offsetY-sheetPanDrag.sy);
+    sheetDraw(); return;
+  }
+  const s=PACK.sheets[PACK.active];
+  if(!s){ $("sheetTooltip").style.display="none"; return; }
+  const wx=(e.offsetX-sheetOx)/sheetZoom, wy=(e.offsetY-sheetOy)/sheetZoom;
+  const hit=s.placed.find(p=> wx>=p.x&&wx<=p.x+p.w&&wy>=p.y&&wy<=p.y+p.h);
+  if(hit){
+    const tt=$("sheetTooltip");
+    tt.innerHTML=`<b>${hit.name}</b><br>${hit.w}×${hit.h} px${hit.trim?" · trimmed":""}`;
+    tt.style.left=(e.clientX+14)+"px"; tt.style.top=(e.clientY+14)+"px";
+    tt.style.display="block";
+  } else $("sheetTooltip").style.display="none";
+});
+window.addEventListener("pointerup",()=>{ sheetPanDrag=null; });
+sheetCv.addEventListener("wheel",e=>{
+  if(!PACK.sheets.length) return;
+  e.preventDefault();
+  const f=e.deltaY<0?1.15:1/1.15;
+  const wx=(e.offsetX-sheetOx)/sheetZoom, wy=(e.offsetY-sheetOy)/sheetZoom;
+  sheetZoom=clamp(sheetZoom*f,0.05,16);
+  sheetOx=e.offsetX-wx*sheetZoom; sheetOy=e.offsetY-wy*sheetZoom;
+  sheetDraw();
+},{passive:false});
+
+/* ---------- frame queue: add / remove / reorder ---------- */
 function sheetAddFrame(name, canvas){
   SHEET.frames.push({id:sheetIdSeq++, name, canvas, w:canvas.width, h:canvas.height});
 }
-
-function sheetRebuild(){
-  const opts = sheetOpts();
-  sheetRefreshFrameList();
-  if(!SHEET.frames.length){
-    sheetCv.width=1; sheetCv.height=1;
-    sheetCtx.clearRect(0,0,1,1);
-    $("sheetInfo").textContent = "no frames added";
-    $("sheetExportPng").disabled = true; $("sheetExportZip").disabled = true;
-    return;
-  }
-  const working = opts.trim ? SHEET.frames.map(f=>({...f, canvas:trimCanvasAlpha(f.canvas)})) : SHEET.frames;
-  const sizes = working.map(f=>({w:f.canvas.width, h:f.canvas.height}));
-  const plan = planSheetLayout(sizes, opts);
-
-  sheetCv.width = plan.canvasW; sheetCv.height = plan.canvasH;
-  sheetCtx.imageSmoothingEnabled = false;
-  sheetCtx.clearRect(0,0,plan.canvasW,plan.canvasH);
-  if(opts.bg==="color"){ sheetCtx.fillStyle=opts.bgColor; sheetCtx.fillRect(0,0,plan.canvasW,plan.canvasH); }
-
-  plan.positions.forEach((p,i)=>{
-    sheetCtx.drawImage(working[i].canvas, p.x, p.y);
-    if(opts.labels){
-      sheetCtx.save();
-      sheetCtx.font="10px monospace";
-      sheetCtx.fillStyle="#ff00ff";
-      sheetCtx.fillText(String(i), p.x+2, p.y+p.h-2);
-      sheetCtx.restore();
-    }
-  });
-
-  SHEET._plan = plan; SHEET._working = working; SHEET._opts = opts;
-  $("sheetInfo").textContent = `${SHEET.frames.length} frame${SHEET.frames.length===1?"":"s"} — ${plan.cols}×${plan.rows} grid — ${plan.canvasW}×${plan.canvasH}px`;
-  $("sheetExportPng").disabled = false; $("sheetExportZip").disabled = false;
-}
-
 function sheetRefreshFrameList(){
   const el = $("sheetFrameList");
   el.innerHTML = "";
@@ -3789,7 +4157,7 @@ function sheetRefreshFrameList(){
     const num=document.createElement("span"); num.className="snum"; num.textContent=i;
     const rm=document.createElement("span"); rm.className="sremove"; rm.textContent="✕";
     rm.title="Remove frame";
-    rm.addEventListener("click", e=>{ e.stopPropagation(); SHEET.frames.splice(i,1); sheetRebuild(); });
+    rm.addEventListener("click", e=>{ e.stopPropagation(); SHEET.frames.splice(i,1); sheetScheduleRepack(); });
     thumb.title = `${f.name} — ${f.w}×${f.h}`;
     thumb.append(c,num,rm);
 
@@ -3803,15 +4171,17 @@ function sheetRefreshFrameList(){
       if(from===to || isNaN(from)) return;
       const [moved] = SHEET.frames.splice(from,1);
       SHEET.frames.splice(to,0,moved);
-      sheetRebuild();
+      sheetScheduleRepack();
     });
     el.appendChild(thumb);
   });
 }
 
 function openSheetOverlay(){
-  sheetRebuild();
+  sheetMakeChecker();
   $("sheetOverlay").classList.remove("hide");
+  sheetResizeCanvas();
+  sheetRepack();
 }
 function closeSheetOverlay(){
   $("sheetOverlay").classList.add("hide");
@@ -3824,6 +4194,7 @@ $("sheetAddImages").addEventListener("click", ()=> $("fileSheetImages").click())
 $("fileSheetImages").addEventListener("change", async e=>{
   const files=[...e.target.files]; e.target.value="";
   for(const file of files){
+    if(!file.type.startsWith("image/")) continue;
     const url = URL.createObjectURL(file);
     const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
     const c=document.createElement("canvas"); c.width=img.naturalWidth; c.height=img.naturalHeight;
@@ -3831,49 +4202,121 @@ $("fileSheetImages").addEventListener("change", async e=>{
     URL.revokeObjectURL(url);
     sheetAddFrame(file.name.replace(/\.[^.]+$/,""), c);
   }
-  sheetRebuild();
+  sheetScheduleRepack();
 });
-$("sheetClear").addEventListener("click", ()=>{ SHEET.frames=[]; sheetRebuild(); });
+$("sheetAddFolder").addEventListener("click", ()=> $("fileSheetFolder").click());
+$("fileSheetFolder").addEventListener("change", async e=>{
+  const files=[...e.target.files]; e.target.value="";
+  for(const file of files){
+    if(!file.type.startsWith("image/")) continue;
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=url; });
+    const c=document.createElement("canvas"); c.width=img.naturalWidth; c.height=img.naturalHeight;
+    c.getContext("2d").drawImage(img,0,0);
+    URL.revokeObjectURL(url);
+    sheetAddFrame(file.name.replace(/\.[^.]+$/,""), c);
+  }
+  sheetScheduleRepack();
+});
+$("sheetClear").addEventListener("click", ()=>{ SHEET.frames=[]; sheetScheduleRepack(); });
 
+/* ---------- mode + settings wiring ---------- */
+function sheetSyncModeUI(){
+  const tight = sheetCurrentMode()==="tight";
+  $("sheetTightControls").style.display = tight ? "" : "none";
+  $("sheetGridControls").style.display = tight ? "none" : "";
+}
+$("sheetModeTight").addEventListener("change", ()=>{ sheetSyncModeUI(); sheetScheduleRepack(); });
+$("sheetModeGrid").addEventListener("change", ()=>{ sheetSyncModeUI(); sheetScheduleRepack(); });
 $("sheetLayout").addEventListener("change", ()=>{
   $("sheetColsRow").style.display = $("sheetLayout").value==="grid-cols" ? "" : "none";
-  sheetRebuild();
+  sheetScheduleRepack();
 });
 $("sheetBg").addEventListener("change", ()=>{
   $("sheetBgColor").style.display = $("sheetBg").value==="color" ? "" : "none";
-  sheetRebuild();
+  sheetScheduleRepack();
 });
-["sheetCols","sheetSpacing","sheetPadding","sheetPot","sheetTrim","sheetLabels","sheetBgColor"]
-  .forEach(id => $(id).addEventListener("input", sheetRebuild));
+["sheetSize","sheetTightPadding","sheetBleed","sheetCols","sheetSpacing","sheetPadding",
+ "sheetPot","sheetTrim","sheetLabels","sheetBgColor"]
+  .forEach(id => $(id).addEventListener("input", sheetScheduleRepack));
+["sheetSize"].forEach(id => $(id).addEventListener("change", sheetScheduleRepack));
 
-$("sheetExportPng").addEventListener("click", async ()=>{
-  if(!SHEET._plan) return;
-  const blob = await toBlobP(sheetCv, "image/png");
-  await dlOrPicker(blob, "spritesheet.png", [{description:"PNG image", accept:{"image/png":[".png"]}}]);
-});
-$("sheetExportZip").addEventListener("click", async ()=>{
-  if(!SHEET._plan) return;
-  const plan = SHEET._plan;
-  const meta = {
-    sheet: {width:plan.canvasW, height:plan.canvasH, cols:plan.cols, rows:plan.rows},
-    frames: SHEET._working.map((f,i)=>({
-      name:f.name, index:i,
-      x:plan.positions[i].x, y:plan.positions[i].y, w:plan.positions[i].w, h:plan.positions[i].h
+/* ---------- export ---------- */
+async function sheetEncode(canvas, fmt, quality){
+  if(["png","jpeg","webp"].includes(fmt)){
+    if(fmt==="jpeg"){
+      const c2=document.createElement("canvas"); c2.width=canvas.width; c2.height=canvas.height;
+      const x2=c2.getContext("2d"); x2.fillStyle="#fff"; x2.fillRect(0,0,c2.width,c2.height);
+      x2.drawImage(canvas,0,0);
+      return toBlobP(c2,"image/jpeg",quality);
+    }
+    return toBlobP(canvas,"image/"+fmt,quality);
+  }
+  const id = canvas.getContext("2d").getImageData(0,0,canvas.width,canvas.height);
+  if(fmt==="bmp") return encodeBMP(id);
+  if(fmt==="tga") return encodeTGA(id);
+  if(fmt==="tiff") return encodeTIFF(id);
+  return toBlobP(canvas,"image/png",quality);
+}
+function sheetBuildMeta(){
+  const name = safeName("spritesheet");
+  return PACK.sheets.map((s,i)=>({
+    file: PACK.sheets.length>1 ? `${name}_${i+1}.png` : `${name}.png`,
+    width: s.w, height: s.h,
+    sprites: s.placed.map(p=>({
+      name:p.name, x:p.x, y:p.y, w:p.w, h:p.h,
+      trim: p.trim ? { x:p.trim.x, y:p.trim.y, sourceWidth:p.trim.sourceWidth, sourceHeight:p.trim.sourceHeight } : null
     }))
-  };
-  const pngBlob = await toBlobP(sheetCv, "image/png");
-  if(typeof JSZip==="undefined"){
-    await dlOrPicker(pngBlob, "spritesheet.png", [{description:"PNG image", accept:{"image/png":[".png"]}}]);
-    $("sheetExportInfo").textContent = "JSZip unavailable — exported PNG only.";
+  }));
+}
+$("sheetExportZip").addEventListener("click", async ()=>{
+  if(!PACK.sheets.length) return;
+  const meta = sheetBuildMeta();
+  const zip = new JSZip();
+  for(let i=0;i<PACK.sheets.length;i++){
+    const blob = await sheetEncode(PACK.sheets[i].canvas, "png", 1);
+    zip.file(meta[i].file, blob);
+  }
+  if($("sheetIncludeJson").checked) zip.file("atlas.json", JSON.stringify(meta,null,2));
+  const out = await zip.generateAsync({type:"blob"});
+  await dlOrPicker(out, safeName("spritesheet")+".zip", [{description:"ZIP archive", accept:{"application/zip":[".zip"]}}]);
+  $("sheetExportInfo").textContent = `Exported ${PACK.sheets.length} sheet${PACK.sheets.length===1?"":"s"}.`;
+});
+$("sheetExportFolder").addEventListener("click", async ()=>{
+  if(!PACK.sheets.length) return;
+  const meta = sheetBuildMeta();
+  const name = safeName("spritesheet");
+
+  if(window.teqAPI){
+    const folder = await window.teqAPI.openFolder();
+    if(!folder) return;
+    for(let i=0;i<PACK.sheets.length;i++){
+      const blob = await sheetEncode(PACK.sheets[i].canvas, "png", 1);
+      const b64 = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(",")[1]); r.onerror=rej; r.readAsDataURL(blob); });
+      await window.teqAPI.writeFile({filePath:`${folder}\\${name}\\${meta[i].file}`, dataBase64:b64});
+    }
+    if($("sheetIncludeJson").checked){
+      const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(meta,null,2))));
+      await window.teqAPI.writeFile({filePath:`${folder}\\${name}\\atlas.json`, dataBase64:jsonB64});
+    }
+    $("sheetExportInfo").textContent = `Wrote ${PACK.sheets.length} sheet${PACK.sheets.length===1?"":"s"} to disk.`;
     return;
   }
-  const zip = new JSZip();
-  zip.file("spritesheet.png", pngBlob);
-  zip.file("spritesheet.json", JSON.stringify(meta,null,2));
-  const out = await zip.generateAsync({type:"blob"});
-  await dlOrPicker(out, "spritesheet.zip", [{description:"ZIP archive", accept:{"application/zip":[".zip"]}}]);
-  $("sheetExportInfo").textContent = `Exported ${SHEET.frames.length} frames.`;
+  if(!FOLDER_OK){ $("sheetExportInfo").textContent = "This browser can't pick a folder — use Export → ZIP instead."; return; }
+  let root;
+  try{ root = await showDirectoryPicker({mode:"readwrite"}); } catch(e){ return; }
+  try{
+    root = await root.getDirectoryHandle(name,{create:true});
+    for(let i=0;i<PACK.sheets.length;i++){
+      const blob = await sheetEncode(PACK.sheets[i].canvas, "png", 1);
+      await writeToDir(root, meta[i].file, blob);
+    }
+    if($("sheetIncludeJson").checked)
+      await writeToDir(root,"atlas.json", new Blob([JSON.stringify(meta,null,2)],{type:"application/json"}));
+    $("sheetExportInfo").textContent = `Wrote ${PACK.sheets.length} sheet${PACK.sheets.length===1?"":"s"} to /${name}`;
+  }catch(e){ $("sheetExportInfo").textContent = "Export failed: "+(e.message||e); }
 });
+
 
 /* ---------- bridge: send a video range straight into the builder ---------- */
 $("vidToSheet").addEventListener("click", async ()=>{
@@ -3905,6 +4348,179 @@ $("vidToSheet").addEventListener("click", async ()=>{
     : `Sent ${total} frames to the Sprite Sheet builder.`;
   setVidExportRunning(false);
   if(done>0) openSheetOverlay();
+});
+
+/* ============================== color adjustments ============================== */
+const ADJ = { active:false, baseId:null, previewImg:null, timer:null, targetSlice:null };
+
+// Classic integer brightness/contrast formula. brightness/contrast are
+// -100..100 as shown on the sliders; mapped to the -255..255 domain the
+// formula expects. Alpha untouched.
+function applyBrightnessContrast(data, brightness, contrast){
+  const b = brightness*2.55;
+  const c = contrast*2.55;
+  const factor = (259*(c+255)) / (255*(259-c));
+  for(let i=0;i<data.length;i+=4){
+    for(let ch=0;ch<3;ch++){
+      let v = data[i+ch] + b;
+      v = factor*(v-128)+128;
+      data[i+ch] = Math.max(0,Math.min(255, Math.round(v)));
+    }
+  }
+}
+
+function rgbToHsl(r,g,b){
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h,s,l=(max+min)/2;
+  if(max===min){ h=s=0; }
+  else{
+    const d=max-min;
+    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h=(g-b)/d + (g<b?6:0); break;
+      case g: h=(b-r)/d + 2; break;
+      case b: h=(r-g)/d + 4; break;
+    }
+    h/=6;
+  }
+  return [h,s,l];
+}
+function hue2rgb(p,q,t){
+  if(t<0) t+=1;
+  if(t>1) t-=1;
+  if(t<1/6) return p+(q-p)*6*t;
+  if(t<1/2) return q;
+  if(t<2/3) return p+(q-p)*(2/3-t)*6;
+  return p;
+}
+function hslToRgb(h,s,l){
+  let r,g,b;
+  if(s===0){ r=g=b=l; }
+  else{
+    const q = l<0.5 ? l*(1+s) : l+s-l*s;
+    const p = 2*l-q;
+    r=hue2rgb(p,q,h+1/3);
+    g=hue2rgb(p,q,h);
+    b=hue2rgb(p,q,h-1/3);
+  }
+  return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+}
+// hueShift: -180..180, satShift/lightShift: -100..100. Alpha untouched.
+function applyHueSatLight(data, hueShift, satShift, lightShift){
+  if(hueShift===0 && satShift===0 && lightShift===0) return;
+  const hh = hueShift/360;
+  const sf = 1 + satShift/100;
+  for(let i=0;i<data.length;i+=4){
+    let [h,s,l] = rgbToHsl(data[i],data[i+1],data[i+2]);
+    h = (h + hh) % 1; if(h<0) h+=1;
+    s = Math.max(0, Math.min(1, s*sf));
+    if(lightShift<0) l = l*(1+lightShift/100);
+    else l = l + (1-l)*(lightShift/100);
+    l = Math.max(0, Math.min(1, l));
+    const [r,g,b] = hslToRgb(h,s,l);
+    data[i]=r; data[i+1]=g; data[i+2]=b;
+  }
+}
+
+function adjReadSliders(){
+  return {
+    brightness: +$("adjBrightness").value,
+    contrast: +$("adjContrast").value,
+    hue: +$("adjHue").value,
+    saturation: +$("adjSaturation").value,
+    lightness: +$("adjLightness").value
+  };
+}
+function adjSyncLabels(){
+  $("adjBrightnessVal").textContent = $("adjBrightness").value;
+  $("adjContrastVal").textContent = $("adjContrast").value;
+  $("adjHueVal").textContent = $("adjHue").value;
+  $("adjSaturationVal").textContent = $("adjSaturation").value;
+  $("adjLightnessVal").textContent = $("adjLightness").value;
+}
+function adjCurrentScope(){
+  return $("adjScopeSlice").checked && ADJ.targetSlice ? "slice" : "full";
+}
+function adjRecompute(){
+  if(!ADJ.active || !ADJ.baseId) return;
+  const v = adjReadSliders();
+  const w=ADJ.baseId.width, h=ADJ.baseId.height;
+
+  if(adjCurrentScope()==="slice"){
+    // Start from an untouched copy of the whole image, then only rewrite
+    // the pixels inside the slice's rect — everything else stays pristine.
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    const ctx=c.getContext("2d");
+    ctx.putImageData(ADJ.baseId,0,0);
+    const r = ADJ.targetSlice;
+    const rx=Math.max(0,Math.round(r.x)), ry=Math.max(0,Math.round(r.y));
+    const rw=Math.max(1,Math.min(Math.round(r.w), w-rx));
+    const rh=Math.max(1,Math.min(Math.round(r.h), h-ry));
+    const sub = ctx.getImageData(rx,ry,rw,rh);
+    applyBrightnessContrast(sub.data, v.brightness, v.contrast);
+    applyHueSatLight(sub.data, v.hue, v.saturation, v.lightness);
+    ctx.putImageData(sub, rx, ry);
+    ADJ.previewImg = c;
+  } else {
+    const out = new ImageData(new Uint8ClampedArray(ADJ.baseId.data), w, h);
+    applyBrightnessContrast(out.data, v.brightness, v.contrast);
+    applyHueSatLight(out.data, v.hue, v.saturation, v.lightness);
+    const c=document.createElement("canvas"); c.width=w; c.height=h;
+    c.getContext("2d").putImageData(out,0,0);
+    ADJ.previewImg = c;
+  }
+  draw();
+}
+function adjScheduleUpdate(){
+  clearTimeout(ADJ.timer);
+  ADJ.timer = setTimeout(adjRecompute, 60);
+}
+["adjBrightness","adjContrast","adjHue","adjSaturation","adjLightness"].forEach(id=>{
+  $(id).addEventListener("input", ()=>{ adjSyncLabels(); adjScheduleUpdate(); });
+});
+$("adjScopeFull").addEventListener("change", adjScheduleUpdate);
+$("adjScopeSlice").addEventListener("change", adjScheduleUpdate);
+
+function openAdjust(){
+  if(!S.img) return;
+  const w=S.img.width, h=S.img.height;
+  ADJ.baseId = S.img.getContext("2d").getImageData(0,0,w,h);
+  ADJ.previewImg = null;
+  ADJ.active = true;
+  const sl = selected();
+  ADJ.targetSlice = sl ? {x:sl.x, y:sl.y, w:sl.w, h:sl.h, name:sl.name} : null;
+  $("adjScopeSlice").disabled = !ADJ.targetSlice;
+  $("adjScopeSliceLabel").textContent = ADJ.targetSlice ? `Selected slice (${ADJ.targetSlice.name})` : "Selected slice (none selected)";
+  if(ADJ.targetSlice) $("adjScopeSlice").checked = true; else $("adjScopeFull").checked = true;
+  ["adjBrightness","adjContrast","adjHue","adjSaturation","adjLightness"].forEach(id=>$(id).value=0);
+  adjSyncLabels();
+  $("dlgAdjust").showModal();
+}
+function adjClosePreview(){
+  ADJ.active = false;
+  ADJ.previewImg = null;
+  ADJ.baseId = null;
+  ADJ.targetSlice = null;
+  clearTimeout(ADJ.timer);
+  draw();
+}
+$("btnAdjust").addEventListener("click", openAdjust);
+$("adjReset").addEventListener("click", ()=>{
+  ["adjBrightness","adjContrast","adjHue","adjSaturation","adjLightness"].forEach(id=>$(id).value=0);
+  adjSyncLabels();
+  adjRecompute();
+});
+$("adjCancel").addEventListener("click", ()=>{ adjClosePreview(); $("dlgAdjust").close(); });
+$("dlgAdjust").addEventListener("close", ()=>{ if(ADJ.active) adjClosePreview(); });
+$("adjApply").addEventListener("click", ()=>{
+  if(!S.img || !ADJ.previewImg){ ADJ.active=false; $("dlgAdjust").close(); return; }
+  pushUndo();
+  const applied = ADJ.previewImg;
+  ADJ.active = false; ADJ.previewImg = null; ADJ.baseId = null;
+  setImage(applied);
+  $("dlgAdjust").close();
+  refreshAll();
 });
 
 /* ============================== batch process ============================== */
