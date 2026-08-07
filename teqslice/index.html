@@ -1040,6 +1040,7 @@ const S = {
   slices:[],                 // {id,name,x,y,w,h,format}
   guides:{v:[], h:[]},       // world px positions
   selId:null,
+  selIds:new Set(),          // multi-selection; selId is the "primary" (last-clicked) member
   tool:"slice",
   zoom:1, ox:40, oy:40,
   snap:true, dim:true, showGuides:true, pixel:true,
@@ -1086,7 +1087,7 @@ function restore(st){
     S.img = st.img; S.W = st.W; S.H = st.H;
     $("sImg").textContent = `${S.W}×${S.H}`;
   }
-  if(!S.slices.find(s=>s.id===S.selId)) S.selId = null;
+  if(!S.slices.find(s=>s.id===S.selId)){ S.selId=null; S.selIds=new Set(); }
   refreshAll();
 }
 function undo(){
@@ -1188,7 +1189,7 @@ function draw(){
   // slices
   const ord = orderedSlices();
   ord.forEach((sl,i)=>{
-    const sel = sl.id===S.selId;
+    const sel = S.selIds.has(sl.id);
     const x=Math.round(w2sX(sl.x))+.5, y=Math.round(w2sY(sl.y))+.5;
     const w=Math.round(sl.w*S.zoom), h=Math.round(sl.h*S.zoom);
     ctx.lineWidth = sel?2:1;
@@ -1202,14 +1203,25 @@ function draw(){
     ctx.fillRect(x-.5, y-.5, tw, 14);
     ctx.fillStyle = "#06232f";
     ctx.fillText(label, x+3.5, y+10);
-    // handles
-    if(sel){
+    // handles — only meaningful (and only drawn) for a single selected slice
+    if(sel && S.selIds.size===1){
       ctx.fillStyle="#ffb54c"; ctx.strokeStyle="#16171b";
       for(const [hx,hy] of handlePoints(sl)){
         ctx.fillRect(hx-4,hy-4,8,8); ctx.strokeRect(hx-4.5,hy-4.5,9,9);
       }
     }
   });
+
+  // live marquee selection rect
+  if(drag && drag.type==="marquee"){
+    const r = drag.rect;
+    ctx.save();
+    ctx.fillStyle="rgba(69,200,255,.12)";
+    ctx.fillRect(r.x,r.y,r.w,r.h);
+    ctx.strokeStyle="#45c8ff"; ctx.lineWidth=1;
+    ctx.strokeRect(r.x+.5,r.y+.5,r.w,r.h);
+    ctx.restore();
+  }
 
   // clone stamp source crosshair + live ghost preview of what will be pasted
   if(S.tool==="clone" && S.img){
@@ -1572,6 +1584,17 @@ function hitSlice(px,py){
   }
   return best;
 }
+// Screen-space rect -> ids of every slice it overlaps at all (partial
+// overlap counts, not just full containment — more forgiving to drag).
+function slicesInScreenRect(rect){
+  const wx1=s2wX(rect.x), wy1=s2wY(rect.y);
+  const wx2=s2wX(rect.x+rect.w), wy2=s2wY(rect.y+rect.h);
+  const minX=Math.min(wx1,wx2), maxX=Math.max(wx1,wx2);
+  const minY=Math.min(wy1,wy2), maxY=Math.max(wy1,wy2);
+  return S.slices
+    .filter(sl => sl.x < maxX && sl.x+sl.w > minX && sl.y < maxY && sl.y+sl.h > minY)
+    .map(sl => sl.id);
+}
 function hitGuide(px,py){
   if(!S.showGuides) return null;
   const tol=5;
@@ -1670,7 +1693,7 @@ cv.addEventListener("pointerdown", e=>{
   }
   // select tool
   const sl = selected();
-  if(sl){
+  if(sl && S.selIds.size===1){
     const hi = hitHandle(sl,px,py);
     if(hi>=0){ pushUndo(); drag={type:"resize", id:sl.id, handle:hi, orig:{...sl}}; return; }
   }
@@ -1679,11 +1702,24 @@ cv.addEventListener("pointerdown", e=>{
     pos: g.axis==="v"?S.guides.v[g.idx]:S.guides.h[g.idx]}; return; }
   const hs = hitSlice(px,py);
   if(hs){
-    select(hs.id);
+    if(e.shiftKey){
+      toggleSelect(hs.id); // additive/subtractive; click again without Shift to drag
+      return;
+    }
+    if(!S.selIds.has(hs.id)) select(hs.id); // clicking outside the current selection replaces it
+    // Group move: carries every slice currently selected (always includes
+    // hs, per the line above). A click with no real movement collapses the
+    // selection down to just this one slice on pointerup.
     pushUndo();
-    drag={type:"move", id:hs.id, wx:s2wX(px)-hs.x, wy:s2wY(py)-hs.y, moved:false};
+    const ids=[...S.selIds];
+    const starts={};
+    for(const id of ids){ const s=S.slices.find(x=>x.id===id); if(s) starts[id]={ox:s.x, oy:s.y}; }
+    drag={type:"move", ids, anchorId:hs.id, wx:s2wX(px)-hs.x, wy:s2wY(py)-hs.y, starts, moved:false};
   } else {
-    select(null);
+    // Empty space: start a marquee. Shift makes it additive to the current
+    // selection; a drag with negligible movement is treated as a plain
+    // click on pointerup (deselect-all, or no-op if additive).
+    drag={type:"marquee", ax:px, ay:py, additive:e.shiftKey, rect:{x:px,y:py,w:0,h:0}};
   }
 });
 
@@ -1727,17 +1763,31 @@ cv.addEventListener("pointermove", e=>{
                w:Math.abs(wx-drag.ax), h:Math.abs(wy-drag.ay)};
   }
   else if(drag.type==="move"){
-    const sl = S.slices.find(s=>s.id===drag.id); if(!sl) return;
-    const c = snapCandidates(sl.id);
+    const anchor = S.slices.find(s=>s.id===drag.anchorId); if(!anchor) return;
+    const c = snapCandidates(anchor.id);
     let nx = s2wX(px)-drag.wx, ny = s2wY(py)-drag.wy;
-    // snap either edge
-    const sx1=snapVal(nx,c.xs), sx2=snapVal(nx+sl.w,c.xs)-sl.w;
+    // snap either edge of the anchor slice; the rest of the group follows
+    // it rigidly (same delta), each still clamped to the canvas on its own
+    const sx1=snapVal(nx,c.xs), sx2=snapVal(nx+anchor.w,c.xs)-anchor.w;
     nx = Math.abs(sx1-nx)<=Math.abs(sx2-nx) ? sx1 : sx2;
-    const sy1=snapVal(ny,c.ys), sy2=snapVal(ny+sl.h,c.ys)-sl.h;
+    const sy1=snapVal(ny,c.ys), sy2=snapVal(ny+anchor.h,c.ys)-anchor.h;
     ny = Math.abs(sy1-ny)<=Math.abs(sy2-ny) ? sy1 : sy2;
-    sl.x = Math.round(clamp(nx,0,S.W-sl.w));
-    sl.y = Math.round(clamp(ny,0,S.H-sl.h));
-    drag.moved=true; syncProps(); statusRect(sl);
+    const anchorNewX = Math.round(clamp(nx,0,S.W-anchor.w));
+    const anchorNewY = Math.round(clamp(ny,0,S.H-anchor.h));
+    const dx = anchorNewX - drag.starts[drag.anchorId].ox;
+    const dy = anchorNewY - drag.starts[drag.anchorId].oy;
+    for(const id of drag.ids){
+      const s = S.slices.find(x=>x.id===id); const st=drag.starts[id];
+      if(!s || !st) continue;
+      s.x = Math.round(clamp(st.ox+dx, 0, S.W-s.w));
+      s.y = Math.round(clamp(st.oy+dy, 0, S.H-s.h));
+    }
+    if(dx!==0 || dy!==0) drag.moved=true;
+    syncProps(); statusRect(anchor);
+  }
+  else if(drag.type==="marquee"){
+    drag.rect = {x:Math.min(drag.ax,px), y:Math.min(drag.ay,py),
+                 w:Math.abs(px-drag.ax), h:Math.abs(py-drag.ay)};
   }
   else if(drag.type==="resize"){
     const sl = S.slices.find(s=>s.id===drag.id); if(!sl) return;
@@ -1809,6 +1859,23 @@ cv.addEventListener("pointerup", e=>{
     // null and silently fail to commit the guide. Bail out here and leave
     // drag alone so the ruler's handler can finish the job.
     return;
+  }
+  else if(drag.type==="marquee"){
+    const r = drag.rect;
+    if(r.w<3 && r.h<3){
+      // negligible movement — treat as a plain click on empty space
+      if(!drag.additive) select(null);
+    } else {
+      const hitIds = slicesInScreenRect(r);
+      const finalIds = drag.additive ? [...new Set([...S.selIds, ...hitIds])] : hitIds;
+      selectSet(finalIds);
+    }
+  }
+  else if(drag.type==="move" && !drag.moved){
+    // clicked (didn't drag) a slice that was part of a larger selection —
+    // collapse down to just that one, matching how most editors treat a
+    // plain click on a multi-selected item
+    select(drag.anchorId);
   }
   if(drag.type==="clone") CLONE.live=null;
   drag=null; updateCursor(e.offsetX,e.offsetY);
@@ -1887,7 +1954,26 @@ rulerDrag(rX,"h"); // top ruler -> horizontal guide
 rulerDrag(rY,"v"); // left ruler -> vertical guide
 
 /* ============================== selection & panels ============================== */
-function select(id){ S.selId=id; refreshAll(); }
+function select(id){
+  S.selId=id;
+  S.selIds = id ? new Set([id]) : new Set();
+  refreshAll();
+}
+// Replaces the whole multi-selection wholesale (used by marquee drag).
+function selectSet(ids){
+  S.selIds = new Set(ids);
+  S.selId = ids.length ? ids[ids.length-1] : null;
+  refreshAll();
+}
+// Adds/removes one id from the current multi-selection (shift+click).
+function toggleSelect(id){
+  if(S.selIds.has(id)) S.selIds.delete(id); else S.selIds.add(id);
+  S.selId = S.selIds.size ? id : null;
+  refreshAll();
+}
+function selectedMulti(){
+  return S.slices.filter(s=>S.selIds.has(s.id));
+}
 
 function syncProps(){
   const sl=selected();
@@ -1914,7 +2000,7 @@ function refreshList(){
   list.innerHTML="";
   ord.forEach((sl,i)=>{
     const row=document.createElement("div");
-    row.className="sliceRow"+(sl.id===S.selId?" on":"");
+    row.className="sliceRow"+(S.selIds.has(sl.id)?" on":"");
     const b=document.createElement("span"); b.className="badge"; b.textContent=String(i+1).padStart(2,"0");
     const nm=document.createElement("input"); nm.type="text"; nm.value=sl.name; nm.spellcheck=false;
     nm.addEventListener("change",()=>{ pushUndo(); sl.name=nm.value||sl.name; refreshAll(); });
@@ -1923,9 +2009,14 @@ function refreshList(){
     const del=document.createElement("button"); del.className="del"; del.textContent="✕"; del.title="Delete slice";
     del.addEventListener("click",e=>{ e.stopPropagation(); pushUndo();
       S.slices=S.slices.filter(s=>s.id!==sl.id);
-      if(S.selId===sl.id) S.selId=null; refreshAll(); });
+      S.selIds.delete(sl.id);
+      if(S.selId===sl.id) S.selId = S.selIds.size ? [...S.selIds].pop() : null;
+      refreshAll(); });
     row.append(b,nm,d,del);
-    row.addEventListener("pointerdown",()=>select(sl.id));
+    row.addEventListener("pointerdown",e=>{
+      if(e.shiftKey || e.ctrlKey || e.metaKey) toggleSelect(sl.id);
+      else select(sl.id);
+    });
     list.appendChild(row);
   });
 }
@@ -1977,13 +2068,13 @@ $("btnDup").addEventListener("click",()=>{
 });
 $("btnDel").addEventListener("click",()=>{ delSelected(); });
 function delSelected(){
-  const sl=selected(); if(!sl) return;
+  if(!S.selIds.size) return;
   pushUndo();
-  S.slices=S.slices.filter(s=>s.id!==sl.id); S.selId=null; refreshAll();
+  S.slices=S.slices.filter(s=>!S.selIds.has(s.id)); S.selId=null; S.selIds=new Set(); refreshAll();
 }
 $("btnClearSlices").addEventListener("click",()=>{
   if(!S.slices.length) return;
-  pushUndo(); S.slices=[]; S.selId=null; refreshAll();
+  pushUndo(); S.slices=[]; S.selId=null; S.selIds=new Set(); refreshAll();
 });
 
 /* ============================== image loading ============================== */
@@ -1996,7 +2087,7 @@ function loadImageFile(file){
     c.getContext("2d").drawImage(im,0,0);
     S.img=c; S.W=c.width; S.H=c.height;
     S.name=(file.name||"image").replace(/\.[^.]+$/,"");
-    S.slices=[]; S.guides={v:[],h:[]}; S.selId=null;
+    S.slices=[]; S.guides={v:[],h:[]}; S.selId=null; S.selIds=new Set();
     undoStack=[]; redoStack=[]; updateUndoButtons(); dirty=false;
     $("drop").classList.add("hide");
     $("sImg").textContent=`${S.W}×${S.H}`;
@@ -2029,7 +2120,7 @@ function clampSlicesGuides(){
   });
   S.guides.v = S.guides.v.filter(g=>g>=0&&g<=S.W);
   S.guides.h = S.guides.h.filter(g=>g>=0&&g<=S.H);
-  if(!S.slices.find(s=>s.id===S.selId)) S.selId=null;
+  if(!S.slices.find(s=>s.id===S.selId)){ S.selId=null; S.selIds=new Set(); }
 }
 function setImage(canvas){
   S.img=canvas; S.W=canvas.width; S.H=canvas.height;
@@ -2154,7 +2245,7 @@ function syncGridMode(){
 $("gCancel").addEventListener("click",()=>$("dlgGrid").close());
 $("gOk").addEventListener("click",()=>{
   pushUndo();
-  if($("gReplace").checked){ S.slices=[]; S.selId=null; }
+  if($("gReplace").checked){ S.slices=[]; S.selId=null; S.selIds=new Set(); }
   if($("gByCount").checked){
     const rows=Math.max(1,+$("gRows").value|0), cols=Math.max(1,+$("gCols").value|0);
     const rs=segsCount(0,S.H,rows,$("gUniform").checked);
@@ -2373,7 +2464,7 @@ $("dtRun").addEventListener("click",()=>{
 $("dtOk").addEventListener("click",()=>{
   if(!DT.results || !DT.results.length){ $("dlgDetect").close(); return; }
   pushUndo();
-  if($("dtReplace").checked){ S.slices=[]; S.selId=null; }
+  if($("dtReplace").checked){ S.slices=[]; S.selId=null; S.selIds=new Set(); }
   DT.results.forEach((r,i)=>{
     const sl=newSlice(r.x,r.y,r.w,r.h);
     sl.name=`${S.name}_obj${String(i+1).padStart(2,"0")}`;
@@ -2399,7 +2490,7 @@ $("dvOk").addEventListener("click",()=>{
       ? segsCount(sl.x, sl.w, Math.max(1,+$("dvCols").value|0), uni)
       : segsSize(sl.x, sl.w, Math.max(1,+$("dvColPx").value|0), !uni);
   }
-  S.slices=S.slices.filter(s=>s.id!==sl.id); S.selId=null;
+  S.slices=S.slices.filter(s=>s.id!==sl.id); S.selId=null; S.selIds=new Set();
   rows.forEach((r,ri)=>cols.forEach((c,ci)=>{
     const n=newSlice(c.s,r.s,c.z,r.z);
     n.name=`${sl.name}_${ri+1}-${ci+1}`; n.format=sl.format;
@@ -2413,7 +2504,7 @@ $("btnFromGuides").addEventListener("click",()=>{
   const hs=[...new Set([0,...S.guides.h.filter(v=>v>0&&v<S.H).map(Math.round),S.H])].sort((a,b)=>a-b);
   if(vs.length<2&&hs.length<2) return;
   pushUndo();
-  S.slices=[]; S.selId=null;
+  S.slices=[]; S.selId=null; S.selIds=new Set();
   for(let r=0;r<hs.length-1;r++) for(let c=0;c<vs.length-1;c++){
     const sl=newSlice(vs[c],hs[r],vs[c+1]-vs[c],hs[r+1]-hs[r]);
     sl.name=`${S.name}_${String(r+1).padStart(2,"0")}_${String(c+1).padStart(2,"0")}`;
@@ -2626,7 +2717,10 @@ async function exportSlices(list,dest){
 function exportDefault(){ exportSlices(orderedSlices(), FOLDER_OK?"folder":"zip"); }
 $("btnExportFolder").addEventListener("click",()=>exportSlices(orderedSlices(),"folder"));
 $("btnExportAll").addEventListener("click",()=>exportSlices(orderedSlices(),"zip"));
-$("btnExportSel").addEventListener("click",()=>{ const sl=selected(); if(sl) exportSlices([sl],"single"); });
+$("btnExportSel").addEventListener("click",()=>{
+  const ms=selectedMulti();
+  if(ms.length) exportSlices(ms, ms.length>1?"zip":"single");
+});
 if(!FOLDER_OK){
   $("btnExportFolder").style.display="none";
   $("btnExportAll").classList.add("primary");
@@ -3083,7 +3177,7 @@ $("fileProj").addEventListener("change",e=>{
         S.name=d.name||"image";
         S.slices=(d.slices||[]).map(s=>({format:"",...s}));
         nextId = Math.max(0,...S.slices.map(s=>s.id))+1;
-        S.guides=d.guides||{v:[],h:[]}; S.selId=null;
+        S.guides=d.guides||{v:[],h:[]}; S.selId=null; S.selIds=new Set();
         undoStack=[]; redoStack=[]; updateUndoButtons(); dirty=false;
         $("drop").classList.add("hide");
         $("sImg").textContent=`${S.W}×${S.H}`;
@@ -3207,7 +3301,7 @@ function applyTemplate(t){
     if(!confirm(`Apply template "${t.name}"? This will replace all ${S.slices.length} existing slice(s).`)) return;
   }
   pushUndo();
-  S.slices=[]; S.selId=null;
+  S.slices=[]; S.selId=null; S.selIds=new Set();
   const rs = segsCount(0, S.H, t.rows, t.uniform);
   const cs = segsCount(0, S.W, t.cols, t.uniform);
   rs.forEach((r,ri)=>cs.forEach((c,ci)=>{
