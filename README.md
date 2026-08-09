@@ -33,6 +33,9 @@ teqtools/
 | **TeqDocs** | ✅ Live | [teqxus.app/teqdocs](https://teqxus.app/teqdocs) |
 | **TeqCarve** | ✅ Live | GitHub Releases |
 | **TeqStudy** | ✅ Live | [teqvault.study](https://teqvault.study) |
+| **TeqVault IDE** | 🆕 New | [GitHub Releases](https://github.com/teqvault/teqIDE/releases/download/1.0.0/Teq.Vault.IDE.Setup.0.1.0.exe) |
+| **TeqMusic** | ✅ Live | [Google Play](https://play.google.com/store/apps/details?id=com.teqvault.teqmusic) |
+| **TeqStream** | 🧪 In Testing | Coming soon to Google Play |
 | **TeqDocs Military** | 🔧 In Development | — |
 
 ---
