@@ -342,7 +342,7 @@ async function callGemini(apiKey, messages, systemPrompt, model) {
   const body = { contents }
   if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] }
   const response = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.5-flash'}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-3.6-flash'}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -409,6 +409,26 @@ ipcMain.handle('ai:send-message', async (event, { provider, apiKey, messages, sy
           text: await callOpenAICompatible(
             'https://integrate.api.nvidia.com/v1/chat/completions',
             model || 'deepseek-ai/deepseek-v4-flash-0731',
+            apiKey,
+            messages,
+            systemPrompt
+          ),
+        }
+      case 'mistral':
+        return {
+          text: await callOpenAICompatible(
+            'https://api.mistral.ai/v1/chat/completions',
+            model || 'mistral-small-2603',
+            apiKey,
+            messages,
+            systemPrompt
+          ),
+        }
+      case 'cerebras':
+        return {
+          text: await callOpenAICompatible(
+            'https://api.cerebras.ai/v1/chat/completions',
+            model || 'gpt-oss-120b',
             apiKey,
             messages,
             systemPrompt
