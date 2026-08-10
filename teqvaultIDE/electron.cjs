@@ -443,6 +443,21 @@ ipcMain.handle('ai:send-message', async (event, { provider, apiKey, messages, sy
   }
 })
 
+// Mirrors importFolder.js's IGNORE_DIR_NAMES (the browser-side "Open
+// Folder" importer already skips these) — fs:list below is the *native*
+// desktop equivalent and was missing this entirely, only skipping
+// dot-directories. That gap meant opening any real JS project folder (this
+// one included — it has its own node_modules) walked into node_modules and
+// fs.promises.stat()'d every single file in it, one at a time, fully
+// serially. For a typical node_modules (tens of thousands of files) that's
+// enough to make the whole app look completely frozen for a long stretch —
+// this was very likely the actual cause of the freezing/unresponsiveness.
+const NATIVE_IGNORE_DIR_NAMES = new Set([
+  'node_modules', '.git', '.svn', '.hg', 'dist', 'build', 'out',
+  '.next', '.nuxt', '.cache', '.parcel-cache', '.turbo', 'coverage',
+  '.vscode', '.idea', '__pycache__',
+])
+
 ipcMain.handle('fs:list', async (event, dirPath) => {
   try {
     const files = []
@@ -460,7 +475,11 @@ ipcMain.handle('fs:list', async (event, dirPath) => {
             name: entry.name,
             size: stat.size,
           })
-        } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        } else if (
+          entry.isDirectory() &&
+          !entry.name.startsWith('.') &&
+          !NATIVE_IGNORE_DIR_NAMES.has(entry.name)
+        ) {
           await walk(fullPath)
         }
       }
