@@ -292,10 +292,16 @@ ipcMain.handle('fs:delete', async (event, filePath) => {
 // Every AI provider call below goes through this — without it, a request
 // that never gets a response (dead connection, provider-side hang, etc.)
 // leaves the renderer's "AI is thinking" state stuck forever with no way
-// out except a full app reload. 90s is generous enough for a large
-// multi-file response but still bounded. Throws a clearly-labeled timeout
-// error so it doesn't look like a generic network failure.
-const AI_REQUEST_TIMEOUT_MS = 90000
+// out except a full app reload. Was 90s — too aggressive in practice: some
+// providers' free/preview tiers (NVIDIA NIM in particular) can legitimately
+// take longer than that on a large request, so 90s was killing genuinely
+// in-progress responses, not just actually-hung ones. 5 minutes is still a
+// real ceiling (never hangs forever), just one long enough that a slow-but-
+// working response doesn't get cut off. The Stop button in AiChat.jsx is
+// still there for anyone who doesn't want to wait that long. Throws a
+// clearly-labeled timeout error so it doesn't look like a generic network
+// failure.
+const AI_REQUEST_TIMEOUT_MS = 300000
 
 async function fetchWithTimeout(url, options, timeoutMs = AI_REQUEST_TIMEOUT_MS) {
   const controller = new AbortController()
