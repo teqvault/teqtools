@@ -545,7 +545,24 @@ ipcMain.handle('terminal:run', async (event, { command, cwd }) => {
 
     let child
     try {
-      child = spawn(shell, args, { cwd: workDir, windowsHide: true })
+      // windowsVerbatimArguments: without this, Node re-escapes every quote
+      // character INSIDE `command` before handing the whole thing to
+      // cmd.exe as a single argument (since from Node's point of view,
+      // `command` is just one array element that happens to contain quote
+      // characters, and it doesn't know those quotes are meant for cmd.exe
+      // to parse, not to survive as literal text). cmd.exe then re-parses
+      // that already-escaped string itself, so a command like
+      // `python "file.py"` turns into cmd.exe seeing `python \"file.py\"`
+      // — and when THAT reaches python.exe, standard Windows argv parsing
+      // treats `\"` as an escaped, literal quote character rather than a
+      // delimiter, so python receives the filename as the 7 literal
+      // characters `"file.py"`, quote marks included, and fails to open
+      // it. This affects any command with quoted arguments on Windows —
+      // not just the Run button, but e.g. `git commit -m "message"` too.
+      // windowsVerbatimArguments tells Node to skip its own escaping and
+      // hand `command` to cmd.exe exactly as written, so cmd.exe's own
+      // (single) round of quote parsing is the only one that happens.
+      child = spawn(shell, args, { cwd: workDir, windowsHide: true, windowsVerbatimArguments: isWin })
     } catch (err) {
       resolve({ code: 1, error: err.message })
       return
