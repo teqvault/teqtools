@@ -578,6 +578,16 @@ ipcMain.handle('terminal:kill', async () => {
 
 ipcMain.handle('terminal:home-dir', async () => os.homedir())
 
+// Backs the "Run" button on .py files (see Toolbar.jsx/App.jsx's
+// handleRunPython and Terminal.jsx's runRequest handling) — a fresh,
+// unique scratch directory to write the file's CURRENT editor content
+// into before running it, since that content may not exist as a real
+// file on disk at all (an unlinked "New Project" file lives only in
+// memory/IndexedDB — see fs.js). A new mkdtemp() call per run means two
+// files with the same name (e.g. running the same script twice, or two
+// different projects both having a script.py) never collide.
+ipcMain.handle('fs:get-temp-dir', async () => fs.promises.mkdtemp(path.join(os.tmpdir(), 'teqvault-run-')))
+
 // Resolves a `cd` target against the current cwd and confirms it's actually
 // a directory — handled here rather than by just spawning `cd` as a command,
 // since `cd` only changes the *spawned subprocess's* directory, not anything

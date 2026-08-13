@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeFile: (filePath, content, binary) => ipcRenderer.invoke('fs:write', filePath, content, binary),
     deleteFile: (filePath) => ipcRenderer.invoke('fs:delete', filePath),
     listFiles: (dirPath) => ipcRenderer.invoke('fs:list', dirPath),
+    // A fresh scratch directory for the "Run" button (see Terminal.jsx's
+    // runRequest) to write a file's current content into before running
+    // it — see electron.cjs's fs:get-temp-dir for why this exists.
+    getTempDir: () => ipcRenderer.invoke('fs:get-temp-dir'),
   },
   dialog: {
     openDirectory: () => ipcRenderer.invoke('dialog:open-directory'),
