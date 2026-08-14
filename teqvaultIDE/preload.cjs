@@ -48,6 +48,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('terminal:data', (event, chunk) => callback(chunk))
     },
   },
+  // Desktop's Python Console (PythonConsole.jsx) — a single long-lived
+  // `python -u -i` process, separate from the one-shot terminal.run above
+  // (see electron.cjs's python-repl:start comment for why a REPL needs
+  // its own persistent-process model instead).
+  pythonRepl: {
+    start: () => ipcRenderer.invoke('python-repl:start'),
+    send: (line) => ipcRenderer.invoke('python-repl:send', line),
+    stop: () => ipcRenderer.invoke('python-repl:stop'),
+    onData: (callback) => {
+      ipcRenderer.removeAllListeners('python-repl:data')
+      ipcRenderer.on('python-repl:data', (event, chunk) => callback(chunk))
+    },
+    onExit: (callback) => {
+      ipcRenderer.removeAllListeners('python-repl:exit')
+      ipcRenderer.on('python-repl:exit', (event, err) => callback(err))
+    },
+  },
   git: {
     // Every call takes an explicit repoPath (see src/store.js's
     // desktopFolderPath) rather than assuming a single global cwd — see

@@ -605,6 +605,71 @@ ipcMain.handle('terminal:home-dir', async () => os.homedir())
 // different projects both having a script.py) never collide.
 ipcMain.handle('fs:get-temp-dir', async () => fs.promises.mkdtemp(path.join(os.tmpdir(), 'teqvault-run-')))
 
+// ── Python REPL (desktop console — see PythonConsole.jsx) ──────────────────
+// Deliberately separate from terminal:run's runningProc above: that's a
+// one-shot "run to completion" model (spawn, wait, resolve), which can't
+// hold a REPL's state (variables defined by one line need to still exist
+// for the next). This instead keeps ONE `python -u -i` (unbuffered,
+// interactive) child process alive for as long as the Console panel is
+// open, and streams its stdin/stdout as a plain pipe. That's genuinely
+// enough for a REPL — Python's own -i mode doesn't need a real pty to
+// work, it just needs something writing lines to its stdin — unlike
+// terminal:run, this was never a candidate for node-pty (see that
+// function's comment on why it's avoided in this project) since a single
+// long-lived pipe is far simpler than trying to fake a full terminal.
+let replProc = null
+
+ipcMain.handle('python-repl:start', async (event) => {
+  if (replProc) {
+    replProc.kill()
+    replProc = null
+  }
+  return new Promise((resolve) => {
+    let child
+    try {
+      // `-u`: unbuffered — without this, Python buffers stdout when it's
+      // not attached to a real terminal (exactly this case), so output
+      // wouldn't stream, it'd all arrive in one burst whenever the buffer
+      // happened to flush. `-i`: interactive — keeps reading from stdin
+      // and printing `>>>`/`...` prompts + expression results, same as
+      // running `python` with no arguments at a real terminal.
+      child = spawn('python', ['-u', '-i'], { windowsHide: true })
+    } catch (err) {
+      resolve({ error: err.message })
+      return
+    }
+    replProc = child
+    child.stdout.on('data', (chunk) => {
+      if (!event.sender.isDestroyed()) event.sender.send('python-repl:data', chunk.toString())
+    })
+    child.stderr.on('data', (chunk) => {
+      if (!event.sender.isDestroyed()) event.sender.send('python-repl:data', chunk.toString())
+    })
+    child.on('error', (err) => {
+      replProc = null
+      if (!event.sender.isDestroyed()) event.sender.send('python-repl:exit', err.message)
+    })
+    child.on('close', () => {
+      replProc = null
+      if (!event.sender.isDestroyed()) event.sender.send('python-repl:exit', null)
+    })
+    resolve({ ok: true })
+  })
+})
+
+ipcMain.handle('python-repl:send', async (event, line) => {
+  if (!replProc) return { error: 'No Python session running' }
+  replProc.stdin.write(line + '\n')
+  return { ok: true }
+})
+
+ipcMain.handle('python-repl:stop', async () => {
+  if (!replProc) return false
+  replProc.kill()
+  replProc = null
+  return true
+})
+
 // Resolves a `cd` target against the current cwd and confirms it's actually
 // a directory — handled here rather than by just spawning `cd` as a command,
 // since `cd` only changes the *spawned subprocess's* directory, not anything
