@@ -21,7 +21,7 @@ html,body{height:100%; overflow:hidden}
 body{
   background:var(--bg); color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  display:grid; grid-template-rows:auto 1fr auto; user-select:none;
+  display:grid; grid-template-rows:auto auto 1fr auto; user-select:none;
 }
 .mono{font-family:ui-monospace,"Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace}
 
@@ -30,6 +30,27 @@ header{
   display:flex; align-items:center; gap:6px; padding:6px 10px;
   background:var(--panel); border-bottom:1px solid var(--edge); flex-wrap:wrap;
 }
+/* ---------- document tabs ---------- */
+#docTabs{
+  display:none; align-items:stretch; gap:1px; padding:0 6px;
+  background:var(--bg); border-bottom:1px solid var(--edge); overflow-x:auto;
+}
+#docTabs.show{display:flex}
+.docTab{
+  display:flex; align-items:center; gap:6px; padding:7px 8px 7px 12px;
+  background:var(--panel); border:1px solid var(--edge); border-bottom:none;
+  border-radius:8px 8px 0 0; margin-top:4px; font-size:12px; color:var(--dim);
+  cursor:pointer; white-space:nowrap; max-width:200px;
+}
+.docTab.on{background:var(--bg); color:var(--ink); border-color:var(--accent)}
+.docTab .name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.docTab .dot{width:6px; height:6px; border-radius:50%; background:var(--hot); flex:0 0 auto; display:none}
+.docTab.dirty .dot{display:block}
+.docTab .x{
+  flex:0 0 auto; width:16px; height:16px; border-radius:4px; text-align:center; line-height:16px;
+  color:var(--faint); font-size:12px;
+}
+.docTab .x:hover{background:rgba(255,255,255,.08); color:var(--ink)}
 /* Electron's frameless titlebar overlay (min/max/close) sits on top of the
    page in the top-right corner. Reserve space so it never covers buttons,
    and let the empty header background double as a drag handle. */
@@ -409,6 +430,8 @@ legend{color:var(--dim); font-size:11px; padding:0 4px}
   <button class="btn" id="btnSpriteSheet" title="Sprite Sheet Builder — pack multiple frames into one sheet">Sprite Sheet…</button>
   <button class="btn" id="panelToggle">Panel</button>
 </header>
+
+<div id="docTabs"></div>
 
 <main>
   <div id="stage">
@@ -2077,6 +2100,132 @@ $("btnClearSlices").addEventListener("click",()=>{
   pushUndo(); S.slices=[]; S.selId=null; S.selIds=new Set(); refreshAll();
 });
 
+/* ============================== documents (tabs) ============================== */
+// The rest of the app reads/writes the single live `S` object plus the
+// top-level `undoStack`/`redoStack`/`dirty`/`nextId` variables — that's
+// unchanged and untouched. What's new is a DOCS array holding a saved
+// snapshot of every OTHER open document; switching tabs just copies the
+// active doc's live fields out into its snapshot, then copies the target
+// tab's snapshot back into the live fields. Every existing function that
+// reads S keeps working exactly as before, on whichever doc is "live".
+const DOCS = [];
+let activeDocId = null;
+let docIdSeq = 1;
+
+function snapshotCurrentIntoDoc(doc){
+  if(!doc) return;
+  doc.name=S.name; doc.img=S.img; doc.W=S.W; doc.H=S.H;
+  doc.slices=S.slices; doc.guides=S.guides; doc.selId=S.selId; doc.selIds=S.selIds;
+  doc.zoom=S.zoom; doc.ox=S.ox; doc.oy=S.oy;
+  doc.undoStack=undoStack; doc.redoStack=redoStack; doc.dirty=dirty; doc.nextId=nextId;
+}
+function restoreDocIntoCurrent(doc){
+  S.name=doc.name; S.img=doc.img; S.W=doc.W; S.H=doc.H;
+  S.slices=doc.slices; S.guides=doc.guides; S.selId=doc.selId; S.selIds=doc.selIds;
+  S.zoom=doc.zoom; S.ox=doc.ox; S.oy=doc.oy;
+  undoStack=doc.undoStack; redoStack=doc.redoStack; dirty=doc.dirty; nextId=doc.nextId;
+  $("sImg").textContent = S.img ? `${S.W}×${S.H}` : "—";
+  document.title = S.name ? `TeqSlice — ${S.name}` : "TeqSlice";
+}
+function refreshTabs(){
+  const el=$("docTabs");
+  el.classList.toggle("show", DOCS.length>1);
+  el.innerHTML="";
+  DOCS.forEach(doc=>{
+    const isDirty = doc.id===activeDocId ? dirty : doc.dirty;
+    const tab=document.createElement("div");
+    tab.className="docTab"+(doc.id===activeDocId?" on":"")+(isDirty?" dirty":"");
+    tab.title=doc.name;
+    const dot=document.createElement("span"); dot.className="dot";
+    const nm=document.createElement("span"); nm.className="name"; nm.textContent=doc.name;
+    const x=document.createElement("span"); x.className="x"; x.textContent="✕"; x.title="Close tab";
+    x.addEventListener("click", e=>{ e.stopPropagation(); closeDoc(doc.id); });
+    tab.append(dot,nm,x);
+    tab.addEventListener("click", ()=> switchToDoc(doc.id));
+    el.appendChild(tab);
+  });
+}
+function switchToDoc(id){
+  if(id===activeDocId) return;
+  const cur = DOCS.find(d=>d.id===activeDocId);
+  if(cur) snapshotCurrentIntoDoc(cur);
+  const next = DOCS.find(d=>d.id===id);
+  if(!next) return;
+  restoreDocIntoCurrent(next);
+  activeDocId = id;
+  updateUndoButtons();
+  $("drop").classList.toggle("hide", !!S.img);
+  fit(); refreshAll(); refreshTabs();
+}
+function openNewDoc(canvas, name){
+  const cur = DOCS.find(d=>d.id===activeDocId);
+  if(cur) snapshotCurrentIntoDoc(cur);
+  const doc = {
+    id: docIdSeq++, name, img:canvas, W:canvas.width, H:canvas.height,
+    slices:[], guides:{v:[],h:[]}, selId:null, selIds:new Set(),
+    zoom:1, ox:40, oy:40, undoStack:[], redoStack:[], dirty:false, nextId:1
+  };
+  DOCS.push(doc);
+  restoreDocIntoCurrent(doc);
+  activeDocId = doc.id;
+  updateUndoButtons();
+  $("drop").classList.add("hide");
+  fit(); refreshAll(); refreshTabs();
+}
+function closeDoc(id){
+  const doc = DOCS.find(d=>d.id===id);
+  if(!doc) return;
+  const isDirty = id===activeDocId ? dirty : doc.dirty;
+  if(isDirty && !confirm(`"${doc.name}" has unsaved changes. Close anyway?`)) return;
+
+  const idx = DOCS.indexOf(doc);
+  DOCS.splice(idx,1);
+  if(id===activeDocId){
+    if(DOCS.length){
+      const next = DOCS[Math.max(0, idx-1)];
+      restoreDocIntoCurrent(next);
+      activeDocId = next.id;
+      updateUndoButtons();
+      fit(); refreshAll();
+    } else {
+      activeDocId = null;
+      S.img=null; S.name="image"; S.W=0; S.H=0; S.slices=[]; S.guides={v:[],h:[]};
+      S.selId=null; S.selIds=new Set(); S.zoom=1; S.ox=40; S.oy=40;
+      undoStack=[]; redoStack=[]; dirty=false; nextId=1;
+      updateUndoButtons();
+      $("drop").classList.remove("hide");
+      $("sImg").textContent="—";
+      document.title="TeqSlice";
+      refreshAll();
+    }
+  }
+  refreshTabs();
+}
+
+// Cycle/close tabs — guarded so they don't fire while a modal dialog or
+// full-screen overlay (which already intercepts clicks) has focus.
+function noOverlayOpen(){
+  if(document.querySelector("dialog[open]")) return false;
+  for(const id of ["animOverlay","videoOverlay","sheetOverlay"]){
+    const el=$(id); if(el && !el.classList.contains("hide")) return false;
+  }
+  return true;
+}
+window.addEventListener("keydown", e=>{
+  if(!noOverlayOpen() || !DOCS.length) return;
+  if(e.ctrlKey && e.key==="Tab"){
+    e.preventDefault();
+    const idx = DOCS.findIndex(d=>d.id===activeDocId);
+    const next = e.shiftKey
+      ? DOCS[(idx-1+DOCS.length)%DOCS.length]
+      : DOCS[(idx+1)%DOCS.length];
+    if(next) switchToDoc(next.id);
+  } else if(e.ctrlKey && !e.shiftKey && e.key.toLowerCase()==="w"){
+    e.preventDefault();
+    if(activeDocId!=null) closeDoc(activeDocId);
+  }
+});
+
 /* ============================== image loading ============================== */
 function loadImageFile(file){
   const url=URL.createObjectURL(file);
@@ -2085,13 +2234,7 @@ function loadImageFile(file){
     const c=document.createElement("canvas");
     c.width=im.naturalWidth; c.height=im.naturalHeight;
     c.getContext("2d").drawImage(im,0,0);
-    S.img=c; S.W=c.width; S.H=c.height;
-    S.name=(file.name||"image").replace(/\.[^.]+$/,"");
-    S.slices=[]; S.guides={v:[],h:[]}; S.selId=null; S.selIds=new Set();
-    undoStack=[]; redoStack=[]; updateUndoButtons(); dirty=false;
-    $("drop").classList.add("hide");
-    $("sImg").textContent=`${S.W}×${S.H}`;
-    fit(); refreshAll();
+    openNewDoc(c, (file.name||"image").replace(/\.[^.]+$/,""));
     URL.revokeObjectURL(url);
   };
   im.onerror=()=>alert("Couldn't load that file as an image.");
